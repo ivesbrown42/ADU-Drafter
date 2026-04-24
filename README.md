@@ -19,6 +19,8 @@ No 3D or Z-axis logic is used in this phase.
 - `adu_drafter/main.py` – pipeline entrypoint and LLM integration seam.
 - `data/site_input.json` – hardcoded site + setback input.
 - `data/manual_design_brief.json` – deterministic design brief sample.
+- `prompts/agent-1-site-decision.md` – Agent 1 prompt (site analysis + placement decision only).
+- `prompts/master-orchestration.md` – master contract for Agent 1 → Agent 2 sequencing.
 
 ## Quick Start
 
