@@ -6,9 +6,11 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from pydantic import ValidationError
 
 from .contracts import (
     build_agent_2_input,
+    build_conflict_geometry_resolver_input,
     build_geometry_resolver_input,
     ensure_sw_normalized,
     load_agent_1_input,
@@ -22,6 +24,52 @@ from .contracts import (
 def _write_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def _load_with_retries(loader, path: Path, *, retries: int, stage_name: str):
+    """
+    Load and validate a JSON artifact with bounded retries.
+    Retries re-read from disk to allow upstream agent corrections between attempts.
+    """
+    last_error: Exception | None = None
+    for attempt in range(1, retries + 1):
+        try:
+            return loader(path)
+        except (ValidationError, ValueError) as exc:
+            last_error = exc
+            if attempt == retries:
+                break
+            print(
+                f"[retry] {stage_name} validation failed (attempt {attempt}/{retries}): {exc}. "
+                "Waiting for corrected artifact and retrying..."
+            )
+    assert last_error is not None
+    raise ValueError(
+        f"{stage_name} validation failed after {retries} attempts: {last_error}"
+    ) from last_error
+
+
+def _validate_with_retries(validator, *validator_args, retries: int, stage_name: str):
+    """
+    Run cross-contract validator with bounded retries.
+    """
+    last_error: Exception | None = None
+    for attempt in range(1, retries + 1):
+        try:
+            validator(*validator_args)
+            return
+        except (ValidationError, ValueError) as exc:
+            last_error = exc
+            if attempt == retries:
+                break
+            print(
+                f"[retry] {stage_name} contract check failed (attempt {attempt}/{retries}): {exc}. "
+                "Waiting for corrected artifact and retrying..."
+            )
+    assert last_error is not None
+    raise ValueError(
+        f"{stage_name} contract check failed after {retries} attempts: {last_error}"
+    ) from last_error
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -81,6 +129,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Retry limit forwarded to Agent 2 input builder.",
     )
     parser.add_argument(
+        "--schema-retries",
+        type=int,
+        default=3,
+        help="Retry count for loading/validating Agent artifacts before hard fail.",
+    )
+    parser.add_argument(
         "--input-coordinates-normalized-to-sw",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -92,9 +146,28 @@ def build_parser() -> argparse.ArgumentParser:
 def run_orchestration(args: argparse.Namespace) -> int:
     print("Starting deterministic pipeline orchestration...")
 
-    agent_1_input = load_agent_1_input(args.agent_1_input)
-    agent_1_output = load_agent_1_output(args.agent_1_output)
-    validate_agent_1_output_against_input(agent_1_input, agent_1_output)
+    if args.schema_retries < 1:
+        raise ValueError("--schema-retries must be >= 1")
+
+    agent_1_input = _load_with_retries(
+        load_agent_1_input,
+        args.agent_1_input,
+        retries=args.schema_retries,
+        stage_name="Agent 1 input",
+    )
+    agent_1_output = _load_with_retries(
+        load_agent_1_output,
+        args.agent_1_output,
+        retries=args.schema_retries,
+        stage_name="Agent 1 output",
+    )
+    _validate_with_retries(
+        validate_agent_1_output_against_input,
+        agent_1_input,
+        agent_1_output,
+        retries=args.schema_retries,
+        stage_name="Agent 1 cross-contract",
+    )
     print("[1] Agent 1 artifacts validated.")
 
     ensure_sw_normalized(args.input_coordinates_normalized_to_sw)
@@ -103,16 +176,23 @@ def run_orchestration(args: argparse.Namespace) -> int:
         # Prevent accidental reuse of stale non-conflict resolver artifacts.
         if args.resolver_output.exists():
             args.resolver_output.unlink()
+        conflict_resolver_input = build_conflict_geometry_resolver_input(
+            agent_1_input,
+            agent_1_output,
+            input_coordinates_normalized_to_sw=args.input_coordinates_normalized_to_sw,
+        )
+        _write_json(args.resolver_output, conflict_resolver_input.model_dump(mode="json"))
         conflict_payload = {
             "status": "conflict",
             "message": (
                 "Agent 1 returned conflict_flag=true; Agent 2 and geometry resolver "
-                "handoff generation were skipped."
+                "handoff generation were skipped. Conflict resolver payload generated."
             ),
             "agent_1_output": agent_1_output.model_dump(mode="json"),
         }
         _write_json(args.conflict_output, conflict_payload)
         print(f"[2] Conflict artifact written to {args.conflict_output}")
+        print(f"[3] Conflict geometry resolver payload written to {args.resolver_output}")
         return 0
 
     if args.agent_2_output is None:
@@ -128,8 +208,19 @@ def run_orchestration(args: argparse.Namespace) -> int:
     )
     print("[2] Agent 2 input built from validated Agent 1 artifacts.")
 
-    agent_2_output = load_agent_2_output(args.agent_2_output)
-    validate_agent_2_output_against_input(agent_2_input, agent_2_output)
+    agent_2_output = _load_with_retries(
+        load_agent_2_output,
+        args.agent_2_output,
+        retries=args.schema_retries,
+        stage_name="Agent 2 output",
+    )
+    _validate_with_retries(
+        validate_agent_2_output_against_input,
+        agent_2_input,
+        agent_2_output,
+        retries=args.schema_retries,
+        stage_name="Agent 2 cross-contract",
+    )
     print("[3] Agent 2 output validated against Agent 2 input.")
 
     resolver_input = build_geometry_resolver_input(

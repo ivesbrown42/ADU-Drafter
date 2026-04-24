@@ -71,6 +71,8 @@ def run(args: argparse.Namespace) -> int:
         agent_2_output=args.agent_2_output,
         resolver_output=args.resolver_input_output,
         conflict_output=args.conflict_output,
+        schema_retries=args.max_retry_iteration,
+        retry_poll_seconds=2.0,
         grid_step_ft=args.grid_step_ft,
         wall_thickness_options_ft=args.wall_thickness_options_ft,
         max_retry_iteration=args.max_retry_iteration,

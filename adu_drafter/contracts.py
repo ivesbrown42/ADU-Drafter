@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 from typing import Literal, Sequence
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 StreetFrontage = Literal["north", "south", "east", "west"]
 OriginCorner = Literal["SW", "SE", "NW", "NE"]
@@ -288,7 +289,36 @@ class RoomIntent(BaseModel):
     room_id: str = Field(min_length=1)
     room_type: RoomType
     target_area_sf: float = Field(gt=0)
+    rect: "LocalRect"
     adjacency: list[str] = Field(default_factory=list)
+
+
+class LocalPoint(BaseModel):
+    """A 2D point in zone-local feet coordinates."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    x_ft: float = Field(ge=0)
+    y_ft: float = Field(ge=0)
+
+
+class LocalRect(BaseModel):
+    """Axis-aligned room rectangle in zone-local feet coordinates."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    x_ft: float = Field(ge=0)
+    y_ft: float = Field(ge=0)
+    width_ft: float = Field(gt=0)
+    depth_ft: float = Field(gt=0)
+
+    @property
+    def max_x(self) -> float:
+        return self.x_ft + self.width_ft
+
+    @property
+    def max_y(self) -> float:
+        return self.y_ft + self.depth_ft
 
 
 class WallIntent(BaseModel):
@@ -296,8 +326,8 @@ class WallIntent(BaseModel):
 
     wall_id: str = Field(min_length=1)
     kind: WallKind
-    start_ratio: RatioPoint
-    end_ratio: RatioPoint
+    start_local: LocalPoint
+    end_local: LocalPoint
     thickness_ft: float = Field(gt=0)
 
 
@@ -307,7 +337,7 @@ class OpeningIntent(BaseModel):
     opening_id: str = Field(min_length=1)
     wall_id: str = Field(min_length=1)
     opening_type: OpeningType
-    position_ratio_on_wall: float = Field(ge=0.0, le=1.0)
+    anchor_local: LocalPoint
     width_ft: float = Field(gt=0)
 
 
@@ -665,6 +695,117 @@ def validate_agent_2_output_against_input(agent_input: Agent2Input, agent_output
         raise ValueError("Agent2 output zone_id does not match Agent2 input selected_zone")
     if agent_output.design_summary.program_id != agent_input.selected_program.program_id:
         raise ValueError("Agent2 output program_id does not match Agent2 input selected_program")
+
+    zone_xs = [pt[0] for pt in agent_input.selected_zone.zone_polygon_sw_origin]
+    zone_ys = [pt[1] for pt in agent_input.selected_zone.zone_polygon_sw_origin]
+    zone_width_ft = max(zone_xs) - min(zone_xs)
+    zone_depth_ft = max(zone_ys) - min(zone_ys)
+    grid = agent_input.design_rules.grid_step_ft
+
+    if zone_width_ft <= 0 or zone_depth_ft <= 0:
+        raise ValueError("selected_zone has non-positive width/depth")
+
+    def _is_snapped(value: float) -> bool:
+        # Accept tiny floating noise from JSON serialization/LLM formatting.
+        quotient = value / grid
+        return abs(quotient - round(quotient)) <= 1e-6
+
+    def _validate_local_point(name: str, x: float, y: float) -> None:
+        if x < 0 or y < 0 or x > zone_width_ft or y > zone_depth_ft:
+            raise ValueError(f"{name} is outside zone-local bounds")
+        if not _is_snapped(x) or not _is_snapped(y):
+            raise ValueError(f"{name} is not snapped to grid_step_ft={grid}")
+
+    room_ids: set[str] = set()
+    room_rects: list[tuple[str, float, float, float, float]] = []
+    total_room_area = 0.0
+    for room in agent_output.rooms:
+        if room.room_id in room_ids:
+            raise ValueError(f"Duplicate room_id '{room.room_id}' in Agent2 output")
+        room_ids.add(room.room_id)
+        rect = room.rect
+        if rect.max_x > zone_width_ft or rect.max_y > zone_depth_ft:
+            raise ValueError(f"Room '{room.room_id}' extends outside selected zone bounds")
+        if not all(
+            _is_snapped(value)
+            for value in (rect.x_ft, rect.y_ft, rect.width_ft, rect.depth_ft)
+        ):
+            raise ValueError(
+                f"Room '{room.room_id}' rectangle is not snapped to grid_step_ft={grid}"
+            )
+        total_room_area += rect.width_ft * rect.depth_ft
+        room_rects.append((room.room_id, rect.x_ft, rect.y_ft, rect.max_x, rect.max_y))
+
+    # Room rectangles may touch at boundaries but must not overlap with positive area.
+    for i in range(len(room_rects)):
+        id_i, ax1, ay1, ax2, ay2 = room_rects[i]
+        for j in range(i + 1, len(room_rects)):
+            id_j, bx1, by1, bx2, by2 = room_rects[j]
+            overlap_w = min(ax2, bx2) - max(ax1, bx1)
+            overlap_h = min(ay2, by2) - max(ay1, by1)
+            if overlap_w > 0 and overlap_h > 0:
+                raise ValueError(f"Rooms '{id_i}' and '{id_j}' overlap")
+
+    zone_area = zone_width_ft * zone_depth_ft
+    if total_room_area > zone_area + 1e-6:
+        raise ValueError("Total room area exceeds selected zone area")
+
+    wall_ids: set[str] = set()
+    wall_segments: dict[str, tuple[float, float, float, float]] = {}
+    for wall in agent_output.walls_intent:
+        if wall.wall_id in wall_ids:
+            raise ValueError(f"Duplicate wall_id '{wall.wall_id}' in Agent2 output")
+        wall_ids.add(wall.wall_id)
+        _validate_local_point(f"Wall '{wall.wall_id}' start_local", wall.start_local.x_ft, wall.start_local.y_ft)
+        _validate_local_point(f"Wall '{wall.wall_id}' end_local", wall.end_local.x_ft, wall.end_local.y_ft)
+        if (
+            abs(wall.start_local.x_ft - wall.end_local.x_ft) <= 1e-9
+            and abs(wall.start_local.y_ft - wall.end_local.y_ft) <= 1e-9
+        ):
+            raise ValueError(f"Wall '{wall.wall_id}' has zero length")
+        if wall.thickness_ft not in agent_input.design_rules.wall_thickness_options_ft:
+            raise ValueError(
+                f"Wall '{wall.wall_id}' thickness {wall.thickness_ft} is not in allowed options "
+                f"{agent_input.design_rules.wall_thickness_options_ft}"
+            )
+        wall_segments[wall.wall_id] = (
+            wall.start_local.x_ft,
+            wall.start_local.y_ft,
+            wall.end_local.x_ft,
+            wall.end_local.y_ft,
+        )
+
+    for opening in agent_output.openings_intent:
+        if opening.wall_id not in wall_ids:
+            raise ValueError(
+                f"Opening '{opening.opening_id}' references unknown wall_id '{opening.wall_id}'"
+            )
+        _validate_local_point(
+            f"Opening '{opening.opening_id}' anchor_local",
+            opening.anchor_local.x_ft,
+            opening.anchor_local.y_ft,
+        )
+        x1, y1, x2, y2 = wall_segments[opening.wall_id]
+        dx = x2 - x1
+        dy = y2 - y1
+        length = (dx**2 + dy**2) ** 0.5
+        if opening.width_ft > length + 1e-6:
+            raise ValueError(
+                f"Opening '{opening.opening_id}' width exceeds host wall '{opening.wall_id}' length"
+            )
+        # Anchor must lie on host wall segment (within small tolerance).
+        ax = opening.anchor_local.x_ft
+        ay = opening.anchor_local.y_ft
+        cross = abs((ax - x1) * dy - (ay - y1) * dx)
+        if cross > 1e-4:
+            raise ValueError(
+                f"Opening '{opening.opening_id}' anchor is not on host wall '{opening.wall_id}'"
+            )
+        dot = (ax - x1) * dx + (ay - y1) * dy
+        if dot < -1e-6 or dot - (length**2) > 1e-6:
+            raise ValueError(
+                f"Opening '{opening.opening_id}' anchor falls outside host wall '{opening.wall_id}' segment"
+            )
 
 
 def build_geometry_resolver_input(

@@ -295,10 +295,10 @@ def resolve_drawing_instructions(resolver_input: GeometryResolverInput) -> Drawi
     walls_abs: list[dict[str, Any]] = []
     wall_lines: dict[str, tuple[list[float], list[float]]] = {}
     for wall in resolver_input.agent_2_output.walls_intent:
-        sx = zone_sw_x + wall.start_ratio.x * zone_w
-        sy = zone_sw_y + wall.start_ratio.y * zone_h
-        ex = zone_sw_x + wall.end_ratio.x * zone_w
-        ey = zone_sw_y + wall.end_ratio.y * zone_h
+        sx = zone_sw_x + wall.start_local.x_ft
+        sy = zone_sw_y + wall.start_local.y_ft
+        ex = zone_sw_x + wall.end_local.x_ft
+        ey = zone_sw_y + wall.end_local.y_ft
         spt = _pt(sx, sy)
         ept = _pt(ex, ey)
         wall_lines[wall.wall_id] = (spt, ept)
@@ -315,18 +315,15 @@ def resolve_drawing_instructions(resolver_input: GeometryResolverInput) -> Drawi
 
     openings_abs: list[dict[str, Any]] = []
     for opening in resolver_input.agent_2_output.openings_intent:
-        line = wall_lines.get(opening.wall_id)
-        if line is None:
-            continue
-        start, end = line
-        ox = start[0] + (end[0] - start[0]) * opening.position_ratio_on_wall
-        oy = start[1] + (end[1] - start[1]) * opening.position_ratio_on_wall
         openings_abs.append(
             {
                 "opening_id": opening.opening_id,
                 "opening_type": opening.opening_type,
                 "wall_id": opening.wall_id,
-                "anchor": _pt(ox, oy),
+                "anchor": _pt(
+                    zone_sw_x + opening.anchor_local.x_ft,
+                    zone_sw_y + opening.anchor_local.y_ft,
+                ),
                 "width_ft": _r4(opening.width_ft),
             }
         )

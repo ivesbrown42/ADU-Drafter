@@ -176,11 +176,12 @@ If `input_coordinates_normalized_to_sw != true`, processing must fail determinis
 ## Schema D: `agent_2_output.json`
 
 Agent 2 is a design-intent generator, not a coordinate compiler.
+To avoid Python-side packing/optimization, Agent 2 must emit explicit zone-local primitives.
 
 ```json
 {
   "agent": "adu-designer-agent-2",
-  "version": "1.0",
+  "version": "1.1",
   "conflict_flag": false,
   "design_summary": {
     "program_id": "string",
@@ -192,6 +193,12 @@ Agent 2 is a design-intent generator, not a coordinate compiler.
       "room_id": "string",
       "room_type": "bedroom|bathroom|kitchen|living|circulation|storage",
       "target_area_sf": 0.0,
+      "rect": {
+        "x_ft": 0.0,
+        "y_ft": 0.0,
+        "width_ft": 0.0,
+        "depth_ft": 0.0
+      },
       "adjacency": []
     }
   ],
@@ -199,8 +206,8 @@ Agent 2 is a design-intent generator, not a coordinate compiler.
     {
       "wall_id": "string",
       "kind": "exterior|interior",
-      "start_ratio": [0.0, 0.0],
-      "end_ratio": [1.0, 1.0],
+      "start_local": { "x_ft": 0.0, "y_ft": 0.0 },
+      "end_local": { "x_ft": 10.0, "y_ft": 0.0 },
       "thickness_ft": 0.5
     }
   ],
@@ -209,7 +216,7 @@ Agent 2 is a design-intent generator, not a coordinate compiler.
       "opening_id": "string",
       "wall_id": "string",
       "opening_type": "door|window",
-      "position_ratio_on_wall": 0.5,
+      "anchor_local": { "x_ft": 2.5, "y_ft": 0.0 },
       "width_ft": 3.0
     }
   ],
@@ -217,9 +224,12 @@ Agent 2 is a design-intent generator, not a coordinate compiler.
 }
 ```
 
-Notes:
-- Ratios are normalized to selected zone/local layout frames.
-- Python resolves all absolute coordinates.
+Deterministic validation expectations:
+- all local geometry must be inside selected zone extents
+- all coordinates must snap to `design_rules.grid_step_ft`
+- room rectangles must not overlap
+- every opening anchor must lie on its host wall segment
+- every opening width must be less than or equal to host wall length
 
 ---
 

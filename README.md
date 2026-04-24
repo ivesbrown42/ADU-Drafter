@@ -107,6 +107,12 @@ python3 -m adu_drafter.geometry_resolver \
 5. otherwise build Agent 2 input, validate Agent 2 output, and emit:
    - `geometry_resolver_input.json`
 
+Schema retry behavior:
+
+- `--schema-retries` controls bounded retries for Agent 2 output schema/contract failures.
+- On failure, orchestrator prints structured validation errors and retries loading the corrected artifact.
+- If retries are exhausted, orchestration exits non-zero with deterministic error text.
+
 Example:
 
 ```bash
@@ -114,6 +120,7 @@ python3 -m adu_drafter.orchestrate \
   --agent-1-input data/agent_1_input.json \
   --agent-1-output data/agent_1_output.json \
   --agent-2-output data/agent_2_output.json \
+  --schema-retries 3 \
   --resolver-output data/geometry_resolver_input.json
 ```
 
