@@ -1,0 +1,68 @@
+{
+  "site_metadata": {
+    "lot_id": "transit-bonus",
+    "rectangular_lot": true,
+    "lot_width_ft": 50.0,
+    "lot_depth_ft": 120.0,
+    "street_frontage": "south",
+    "origin_corner": "SW"
+  },
+  "existing_structures": [
+    {
+      "id": "s1",
+      "label": "Primary Dwelling",
+      "is_primary_dwelling": true,
+      "offset_from_origin_x_ft": 10.0,
+      "offset_from_origin_y_ft": 20.0,
+      "width_ft": 30.0,
+      "depth_ft": 35.0
+    }
+  ],
+  "primary_dwelling_walls": [
+    {
+      "wall_label": "PD-REAR",
+      "wall_role": "rear"
+    }
+  ],
+  "candidate_zones": [
+    {
+      "zone_id": "zone-1",
+      "strategy": "rear-left",
+      "zone_polygon_sw_origin": [
+        [4.0, 80.0],
+        [24.0, 80.0],
+        [24.0, 110.0],
+        [4.0, 110.0]
+      ],
+      "check_results": {
+        "check_1_rear_setback": true,
+        "check_2_side_setback": true,
+        "check_3_front_constraint": true,
+        "check_4_primary_separation": true,
+        "check_5_other_structure_separation": true
+      },
+      "metrics": {
+        "rear_setback_ft": 4.0,
+        "side_setback_ft": 4.0,
+        "clearance_to_primary_ft": 12.0
+      },
+      "failed_reason_codes": []
+    }
+  ],
+  "program_catalog": [
+    {
+      "program_id": "program-transit",
+      "bedrooms": 2,
+      "bathrooms": 1,
+      "target_area_sf": 750.0,
+      "footprint_width_ft": 25.0,
+      "footprint_depth_ft": 30.0
+    }
+  ],
+  "client_request": {
+    "target_size_sf": 750.0,
+    "bedrooms_preference": 2,
+    "bathrooms_preference": 1,
+    "transit_proximity": true
+  }
+}

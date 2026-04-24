@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 from pydantic import ValidationError
 
@@ -72,6 +73,39 @@ def _validate_with_retries(validator, *validator_args, retries: int, stage_name:
     ) from last_error
 
 
+def _load_agent2_with_retries(
+    path: Path,
+    agent_2_input,
+    *,
+    retries: int,
+    retry_poll_seconds: float,
+):
+    """
+    Reload Agent 2 output from disk on each attempt and validate against Agent2Input.
+    This enables real retry behavior when upstream LLM output is corrected between attempts.
+    """
+    last_error: Exception | None = None
+    for attempt in range(1, retries + 1):
+        try:
+            candidate = load_agent_2_output(path)
+            validate_agent_2_output_against_input(agent_2_input, candidate)
+            return candidate
+        except (ValidationError, ValueError) as exc:
+            last_error = exc
+            if attempt == retries:
+                break
+            print(
+                f"[retry] Agent 2 output validation failed (attempt {attempt}/{retries}): {exc}. "
+                "Waiting for corrected artifact and retrying..."
+            )
+            if retry_poll_seconds > 0:
+                time.sleep(retry_poll_seconds)
+    assert last_error is not None
+    raise ValueError(
+        f"Agent 2 output validation failed after {retries} attempts: {last_error}"
+    ) from last_error
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Validate and orchestrate Agent 1/Agent 2 handoffs."
@@ -135,6 +169,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Retry count for loading/validating Agent artifacts before hard fail.",
     )
     parser.add_argument(
+        "--retry-poll-seconds",
+        type=float,
+        default=0.0,
+        help="Sleep duration between Agent 2 retry attempts.",
+    )
+    parser.add_argument(
         "--input-coordinates-normalized-to-sw",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -146,8 +186,12 @@ def build_parser() -> argparse.ArgumentParser:
 def run_orchestration(args: argparse.Namespace) -> int:
     print("Starting deterministic pipeline orchestration...")
 
+    if not hasattr(args, "retry_poll_seconds"):
+        args.retry_poll_seconds = 0.0
     if args.schema_retries < 1:
         raise ValueError("--schema-retries must be >= 1")
+    if args.retry_poll_seconds < 0:
+        raise ValueError("--retry-poll-seconds must be >= 0")
 
     agent_1_input = _load_with_retries(
         load_agent_1_input,
@@ -208,18 +252,11 @@ def run_orchestration(args: argparse.Namespace) -> int:
     )
     print("[2] Agent 2 input built from validated Agent 1 artifacts.")
 
-    agent_2_output = _load_with_retries(
-        load_agent_2_output,
+    agent_2_output = _load_agent2_with_retries(
         args.agent_2_output,
-        retries=args.schema_retries,
-        stage_name="Agent 2 output",
-    )
-    _validate_with_retries(
-        validate_agent_2_output_against_input,
         agent_2_input,
-        agent_2_output,
         retries=args.schema_retries,
-        stage_name="Agent 2 cross-contract",
+        retry_poll_seconds=args.retry_poll_seconds,
     )
     print("[3] Agent 2 output validated against Agent 2 input.")
 
