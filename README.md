@@ -69,3 +69,26 @@ These helpers enforce canonical schema rules, including:
 - `input_coordinates_normalized_to_sw` must be `true`
 - Agent 2 `zone_id/program_id` must match Agent 1 decision
 - conflict-mode consistency checks
+
+## Orchestrator Entry Point
+
+`adu_drafter/orchestrate.py` wires the canonical handoff flow:
+
+1. load/validate `agent_1_input.json`
+2. load/validate `agent_1_output.json`
+3. cross-validate Agent 1 output against Agent 1 input
+4. if conflict: emit `orchestration_report.json` and stop before Agent 2
+5. otherwise build Agent 2 input, validate Agent 2 output, and emit:
+   - `agent_2_input.json`
+   - `geometry_resolver_input.json`
+   - `orchestration_report.json`
+
+Example:
+
+```bash
+python3 -m adu_drafter.orchestrate \
+  --agent-1-input data/agent_1_input.json \
+  --agent-1-output data/agent_1_output.json \
+  --agent-2-output data/agent_2_output.json \
+  --out-dir data
+```

@@ -1,4 +1,5 @@
 __pycache__/
 *.py[cod]
+data/orchestrator_smoke/
 generated_adu.dxf
 data/buildable_area.geojson
