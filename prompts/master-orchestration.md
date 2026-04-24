@@ -1,5 +1,5 @@
 # ADU PoC Master Orchestration
-Version 1.0 | April 2026
+Version 1.1 | April 2026
 
 ## Goal
 
@@ -11,6 +11,15 @@ Run a strict 2D-only two-agent pipeline where:
 4. Final output artifact is always a DXF file (`generated_adu.dxf`).
 
 No 3D/Z-axis logic is permitted anywhere in this flow.
+
+## Canonical Contracts (Read First)
+
+All pipeline steps MUST conform to:
+
+- `docs/canonical-schemas.md`
+- `docs/python-geometry-resolver-spec.md`
+
+If any agent prompt conflicts with those docs, the canonical schema and Python resolver spec win.
 
 ## Agent Roles
 
@@ -46,13 +55,14 @@ Inputs:
 - Program requirements
 
 Outputs:
-- ADU design brief JSON for deterministic drafting
-- Walls/partitions/openings and optional room labels
-- Zero geometry outside approved build zone
+- ADU interior design intent JSON (`agent_2_design_brief`)
+- Grid-aligned walls/partitions/openings and optional room labels
+- No absolute lot-coordinate resolution (that belongs to Python)
 
 Must not output:
 - Raw DXF commands
 - Any geometry violating Agent 1 constraints
+- Fully resolved lot-absolute drafting coordinates
 
 ## Deterministic Ownership (Python)
 
@@ -61,6 +71,7 @@ Python services remain source of truth for:
 - Grid snap enforcement
 - Schema validation
 - Compliance gate pass/fail decisions
+- Geometry resolution into absolute drawing coordinates
 - DXF drafting via `ezdxf`
 
 LLMs propose intent; Python accepts/rejects and drafts.
@@ -91,13 +102,18 @@ LLMs propose intent; Python accepts/rejects and drafts.
    - Grid snap + collision + topology checks
    - If invalid, return structured errors and retry Agent 2 (bounded retries)
 
-6. **Draft DXF**
-   - Convert validated design brief to layers/entities in `ezdxf`
+6. **Resolve Geometry (Python)**
+   - Convert validated design brief into deterministic absolute drawing instructions
+   - Apply conflict-mode dimension rules and geometry flags per resolver spec
+
+7. **Draft DXF**
+   - Convert resolved instructions to layers/entities in `ezdxf`
    - Write `generated_adu.dxf`
 
-7. **Emit Artifacts**
+8. **Emit Artifacts**
    - Final decision JSON (Agent 1)
    - Final design brief JSON (Agent 2)
+   - Deterministic resolved drawing instruction JSON
    - QA reports
    - DXF output
 
@@ -112,6 +128,7 @@ LLMs propose intent; Python accepts/rejects and drafts.
 - `site_input.json` (complete rectangular site plan + wall labels)
 - `agent_1_decision.json` (placement/program)
 - `agent_2_design_brief.json` (design intent)
+- `resolved_drawing_instructions.json` (Python-generated absolute drawing instructions)
 - `qa_report_agent_1.json`
 - `qa_report_agent_2.json`
 - `generated_adu.dxf`

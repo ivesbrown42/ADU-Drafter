@@ -19,7 +19,10 @@ No 3D or Z-axis logic is used in this phase.
 - `adu_drafter/main.py` – pipeline entrypoint and LLM integration seam.
 - `data/site_input.json` – hardcoded site + setback input.
 - `data/manual_design_brief.json` – deterministic design brief sample.
+- `docs/canonical-schemas.md` – canonical Agent 1 → Agent 2 → Python JSON contracts.
+- `docs/python-geometry-resolver-spec.md` – deterministic geometry compiler spec for Python (not an LLM prompt).
 - `prompts/agent-1-site-decision.md` – Agent 1 prompt (site analysis + placement decision only).
+- `prompts/agent-2-adu-designer.md` – Agent 2 prompt (interior design intent only).
 - `prompts/master-orchestration.md` – master contract for Agent 1 → Agent 2 sequencing.
 
 ## Quick Start
