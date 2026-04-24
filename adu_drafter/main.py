@@ -8,6 +8,7 @@ from pathlib import Path
 
 from shapely.geometry import mapping
 
+from .contracts import ensure_sw_normalized
 from .drafter import generate_dxf_from_brief
 from .geometry_engine import compute_true_buildable_area, validate_design_brief_inside_area
 from .models import ADUDesignBrief, SiteInput
@@ -57,6 +58,22 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional path to write buildable-area polygon as GeoJSON for debug/LLM context.",
     )
+    parser.add_argument(
+        "--require-sw-normalized",
+        action="store_true",
+        help=(
+            "Fail early unless input coordinates are explicitly marked as SW-normalized. "
+            "Useful for Agent 1/Agent 2 orchestrator runs."
+        ),
+    )
+    parser.add_argument(
+        "--input-coordinates-normalized-to-sw",
+        action="store_true",
+        help=(
+            "Assertion flag paired with --require-sw-normalized to mark the current "
+            "input payload as already normalized to SW origin."
+        ),
+    )
     return parser
 
 
@@ -67,7 +84,12 @@ def run_pipeline(
     template_path: Path,
     output_path: Path,
     buildable_geojson_path: Path | None = None,
+    require_sw_normalized: bool = False,
+    input_coordinates_normalized_to_sw: bool = False,
 ) -> None:
+    if require_sw_normalized:
+        ensure_sw_normalized(input_coordinates_normalized_to_sw)
+
     site = load_site_input(site_input_path)
     brief = load_design_brief(design_brief_path)
 
@@ -97,6 +119,8 @@ def main() -> None:
         template_path=args.template,
         output_path=args.output,
         buildable_geojson_path=args.buildable_geojson,
+        require_sw_normalized=args.require_sw_normalized,
+        input_coordinates_normalized_to_sw=args.input_coordinates_normalized_to_sw,
     )
 
 
