@@ -164,6 +164,17 @@ class Agent1ForAgent2(BaseModel):
     constraints_profile_id: str = Field(min_length=1)
 
 
+class StructureSeparation(BaseModel):
+    """Per-structure separation result emitted by Agent 1 when available."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    label: str = Field(min_length=1)
+    clearance_ft: float = Field(ge=0)
+    minimum_required_ft: float = Field(default=6, ge=0)
+    compliant: bool
+
+
 class Agent1Output(BaseModel):
     """Output contract emitted by Agent 1 site-decision step."""
 
@@ -176,6 +187,7 @@ class Agent1Output(BaseModel):
     decision_summary: Agent1DecisionSummary
     compliance_trace: list[ComplianceTraceEntry] = Field(default_factory=list)
     for_agent_2: Agent1ForAgent2
+    structure_separations: list[StructureSeparation] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
@@ -328,6 +340,9 @@ class GeometryResolverInput(BaseModel):
     agent_1_output: Agent1Output
     agent_2_output: Agent2Output
     site_context: SiteContext
+    selected_zone: SelectedZone
+    selected_program: SelectedProgram
+    design_rules: DesignRules
     existing_structures_passthrough: list[ExistingStructure] = Field(default_factory=list)
     input_coordinates_normalized_to_sw: bool
 
@@ -335,6 +350,188 @@ class GeometryResolverInput(BaseModel):
     def validate_normalized_flag(self) -> "GeometryResolverInput":
         if not self.input_coordinates_normalized_to_sw:
             raise ValueError("geometry resolver requires input_coordinates_normalized_to_sw=true")
+        if not self.agent_1_output.conflict_flag:
+            if self.agent_2_output.design_summary.zone_id != self.selected_zone.zone_id:
+                raise ValueError("agent_2_output zone_id must match selected_zone.zone_id")
+            if self.agent_2_output.design_summary.program_id != self.selected_program.program_id:
+                raise ValueError("agent_2_output program_id must match selected_program.program_id")
+        return self
+
+
+class PolylineBoundary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    layer: str = Field(min_length=1)
+    linetype: str = Field(min_length=1)
+    color: int
+    points: list[tuple[float, float]] = Field(min_length=5)
+
+
+class ExistingStructureDrawing(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    label: str = Field(min_length=1)
+    layer: str = Field(min_length=1)
+    linetype: str = Field(min_length=1)
+    color: int
+    sw_corner: tuple[float, float]
+    ne_corner: tuple[float, float]
+    points: list[tuple[float, float]] = Field(min_length=5)
+    label_anchor: tuple[float, float]
+    label_text: str = Field(min_length=1)
+    label_height: float = Field(gt=0)
+
+
+class LabelLine(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    layer: str = Field(min_length=1)
+    color: int
+    anchor: tuple[float, float]
+    text: str = Field(min_length=1)
+    height: float = Field(gt=0)
+    alignment: Literal["MIDDLE_CENTER"]
+
+
+class ADUFootprintDrawing(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    layer: str = Field(min_length=1)
+    linetype: str = Field(min_length=1)
+    color: int
+    sw_corner: tuple[float, float]
+    ne_corner: tuple[float, float]
+    points: list[tuple[float, float]] = Field(min_length=5)
+    side_placement: Literal["left", "right", "centered"]
+
+
+class SeparationZoneDrawing(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    layer: str = Field(min_length=1)
+    linetype: str = Field(min_length=1)
+    color: int
+    sw_corner: tuple[float, float]
+    ne_corner: tuple[float, float]
+    points: list[tuple[float, float]] = Field(min_length=5)
+
+
+class WallAbsoluteDrawing(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    wall_id: str = Field(min_length=1)
+    kind: WallKind
+    start: tuple[float, float]
+    end: tuple[float, float]
+    thickness_ft: float = Field(gt=0)
+    layer: str = Field(min_length=1)
+
+
+class OpeningAbsoluteDrawing(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    opening_id: str = Field(min_length=1)
+    opening_type: OpeningType
+    wall_id: str = Field(min_length=1)
+    anchor: tuple[float, float]
+    width_ft: float = Field(gt=0)
+
+
+class ADUElementsDrawing(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    footprint: ADUFootprintDrawing
+    separation_zone: SeparationZoneDrawing
+    label_lines: list[LabelLine]
+    walls_absolute: list[WallAbsoluteDrawing] = Field(default_factory=list)
+    openings_absolute: list[OpeningAbsoluteDrawing] = Field(default_factory=list)
+
+
+class ConflictNoticeLine(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    layer: str = Field(min_length=1)
+    anchor: tuple[float, float]
+    text: str = Field(min_length=1)
+    height: float = Field(gt=0)
+
+
+class ConflictNotice(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    line1: ConflictNoticeLine
+    line2: ConflictNoticeLine
+
+
+class DimensionEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: Literal["LOT_WIDTH", "LOT_DEPTH", "ADU_WIDTH", "ADU_DEPTH"]
+    layer: str = Field(min_length=1)
+    color: int
+    p1: tuple[float, float]
+    p2: tuple[float, float]
+    dimline_position: tuple[float, float]
+    text: str = Field(min_length=1)
+
+
+class StreetLabelDrawing(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    layer: str = Field(min_length=1)
+    color: int
+    anchor: tuple[float, float]
+    text: str = Field(min_length=1)
+    height: float = Field(gt=0)
+    alignment: Literal["MIDDLE_CENTER"]
+
+
+class SeparationComplianceMarker(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    label: str = Field(min_length=1)
+    layer: str = Field(min_length=1)
+    compliant: bool
+    circle_center: tuple[float, float]
+    circle_radius: float = Field(gt=0)
+    circle_color: int
+    text_anchor: tuple[float, float]
+    text: str = Field(min_length=1)
+    text_height: float = Field(gt=0)
+
+
+class DrawingInstructionPayload(BaseModel):
+    """Deterministic drawing instruction payload emitted by geometry resolver."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    agent: str = Field(min_length=1)
+    version: str = Field(min_length=1)
+    coordinate_system: Literal["SW-origin-feet"]
+    units: Literal["feet"]
+    conflict_flag: bool
+    lot_boundary: PolylineBoundary
+    setback_boundary: PolylineBoundary
+    existing_structures: list[ExistingStructureDrawing] = Field(default_factory=list)
+    adu_elements: ADUElementsDrawing | None
+    conflict_notice: ConflictNotice | None
+    dimensions: list[DimensionEntry] = Field(default_factory=list)
+    street_label: StreetLabelDrawing
+    separation_compliance_markers: list[SeparationComplianceMarker] = Field(default_factory=list)
+    geometry_flags: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_conflict_dimensions(self) -> "DrawingInstructionPayload":
+        ids = {dimension.id for dimension in self.dimensions}
+        if "LOT_WIDTH" not in ids or "LOT_DEPTH" not in ids:
+            raise ValueError("dimensions must include LOT_WIDTH and LOT_DEPTH")
+        if self.conflict_flag:
+            if self.adu_elements is not None:
+                raise ValueError("conflict payload must set adu_elements to null")
+            if self.conflict_notice is None:
+                raise ValueError("conflict payload requires conflict_notice")
+            if "ADU_WIDTH" in ids or "ADU_DEPTH" in ids:
+                raise ValueError("conflict payload must omit ADU_WIDTH/ADU_DEPTH dimensions")
         return self
 
 
@@ -359,6 +556,14 @@ def load_agent_2_input(path: Path | str) -> Agent2Input:
 
 def load_agent_2_output(path: Path | str) -> Agent2Output:
     return Agent2Output.model_validate(_load_json(path))
+
+
+def load_geometry_resolver_input(path: Path | str) -> GeometryResolverInput:
+    return GeometryResolverInput.model_validate(_load_json(path))
+
+
+def load_drawing_instruction_payload(path: Path | str) -> DrawingInstructionPayload:
+    return DrawingInstructionPayload.model_validate(_load_json(path))
 
 
 def _existing_ids(items: Sequence[str]) -> set[str]:
@@ -474,6 +679,9 @@ def build_geometry_resolver_input(
         "agent_1_output": agent_2_input.agent_1_output.model_dump(mode="json"),
         "agent_2_output": agent_2_output.model_dump(mode="json"),
         "site_context": agent_2_input.site_context.model_dump(mode="json"),
+        "selected_zone": agent_2_input.selected_zone.model_dump(mode="json"),
+        "selected_program": agent_2_input.selected_program.model_dump(mode="json"),
+        "design_rules": agent_2_input.design_rules.model_dump(mode="json"),
         "existing_structures_passthrough": [
             s.model_dump(mode="json") for s in (existing_structures_passthrough or [])
         ],

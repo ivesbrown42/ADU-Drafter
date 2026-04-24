@@ -15,6 +15,7 @@ No 3D or Z-axis logic is used in this phase.
 
 - `adu_drafter/models.py` – Pydantic schemas for inputs/contracts.
 - `adu_drafter/contracts.py` – canonical Agent 1/Agent 2/Python runtime contracts + handoff validators.
+- `adu_drafter/geometry_resolver.py` – deterministic absolute-geometry resolver from validated handoffs.
 - `adu_drafter/geometry_engine.py` – Shapely buildable-area and QA checks.
 - `adu_drafter/drafter.py` – ezdxf drafting engine using `template.dxf`.
 - `adu_drafter/main.py` – pipeline entrypoint and LLM integration seam.
@@ -69,6 +70,30 @@ These helpers enforce canonical schema rules, including:
 - `input_coordinates_normalized_to_sw` must be `true`
 - Agent 2 `zone_id/program_id` must match Agent 1 decision
 - conflict-mode consistency checks
+
+## Geometry Resolver
+
+`adu_drafter/geometry_resolver.py` converts validated `GeometryResolverInput` into
+deterministic absolute drawing instructions.
+
+Outputs include:
+
+- lot boundary
+- setback boundary
+- existing structures
+- ADU footprint/separation zone/labels (when non-conflict)
+- dimensions (conflict mode omits `ADU_WIDTH` and `ADU_DEPTH`)
+- street label
+- separation compliance markers
+- `geometry_flags` (no clipping behavior for separation zone)
+
+CLI example:
+
+```bash
+python3 -m adu_drafter.geometry_resolver \
+  --resolver-input data/geometry_resolver_input.json \
+  --output data/resolved_drawing_instructions.json
+```
 
 ## Orchestrator Entry Point
 

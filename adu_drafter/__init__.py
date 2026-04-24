@@ -5,9 +5,15 @@ from .contracts import (
     Agent1Output,
     Agent2Input,
     Agent2Output,
+    DrawingInstructionPayload,
     GeometryResolverInput,
     build_agent_2_input,
     build_geometry_resolver_input,
+)
+from .geometry_resolver import (
+    resolve_drawing_instructions,
+    resolve_from_file,
+    resolve_to_file,
 )
 from .models import ADUDesignBrief, SiteInput
 
@@ -18,7 +24,11 @@ __all__ = [
     "Agent1Output",
     "Agent2Input",
     "Agent2Output",
+    "DrawingInstructionPayload",
     "GeometryResolverInput",
     "build_agent_2_input",
     "build_geometry_resolver_input",
+    "resolve_drawing_instructions",
+    "resolve_from_file",
+    "resolve_to_file",
 ]
