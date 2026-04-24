@@ -100,6 +100,9 @@ def run_orchestration(args: argparse.Namespace) -> int:
     ensure_sw_normalized(args.input_coordinates_normalized_to_sw)
 
     if agent_1_output.conflict_flag:
+        # Prevent accidental reuse of stale non-conflict resolver artifacts.
+        if args.resolver_output.exists():
+            args.resolver_output.unlink()
         conflict_payload = {
             "status": "conflict",
             "message": (

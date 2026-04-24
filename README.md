@@ -17,7 +17,8 @@ No 3D or Z-axis logic is used in this phase.
 - `adu_drafter/contracts.py` – canonical Agent 1/Agent 2/Python runtime contracts + handoff validators.
 - `adu_drafter/geometry_resolver.py` – deterministic absolute-geometry resolver from validated handoffs.
 - `adu_drafter/geometry_engine.py` – Shapely buildable-area and QA checks.
-- `adu_drafter/drafter.py` – ezdxf drafting engine using `template.dxf`.
+- `adu_drafter/drafter.py` – ezdxf drafting engine (brief-based and instruction-payload renderers).
+- `adu_drafter/run_pipeline.py` – one-command Agent1 -> Agent2 -> resolver -> DXF runner.
 - `adu_drafter/main.py` – pipeline entrypoint and LLM integration seam.
 - `data/site_input.json` – hardcoded site + setback input.
 - `data/manual_design_brief.json` – deterministic design brief sample.
@@ -102,11 +103,9 @@ python3 -m adu_drafter.geometry_resolver \
 1. load/validate `agent_1_input.json`
 2. load/validate `agent_1_output.json`
 3. cross-validate Agent 1 output against Agent 1 input
-4. if conflict: emit `orchestration_report.json` and stop before Agent 2
+4. if conflict: emit conflict artifact and stop before Agent 2
 5. otherwise build Agent 2 input, validate Agent 2 output, and emit:
-   - `agent_2_input.json`
    - `geometry_resolver_input.json`
-   - `orchestration_report.json`
 
 Example:
 
@@ -115,5 +114,36 @@ python3 -m adu_drafter.orchestrate \
   --agent-1-input data/agent_1_input.json \
   --agent-1-output data/agent_1_output.json \
   --agent-2-output data/agent_2_output.json \
-  --out-dir data
+  --resolver-output data/geometry_resolver_input.json
+```
+
+## Deterministic DXF Renderer From Resolved Instructions
+
+Render final DXF directly from `resolved_drawing_instructions.json`:
+
+```bash
+python3 -m adu_drafter.drafter \
+  --instructions data/resolved_drawing_instructions.json \
+  --template data/template.dxf \
+  --output generated_adu_from_instructions.dxf
+```
+
+This path does not depend on LLMs once contracts are validated.
+
+## One-Command End-to-End Runner
+
+Run all deterministic steps in sequence:
+
+1. validate/orchestrate Agent 1 + Agent 2 contracts
+2. build `geometry_resolver_input.json`
+3. resolve `resolved_drawing_instructions.json`
+4. render final DXF
+
+```bash
+python3 -m adu_drafter.run_pipeline \
+  --agent-1-input data/orchestrator_smoke/agent_1_input.json \
+  --agent-1-output data/orchestrator_smoke/agent_1_output.json \
+  --agent-2-output data/orchestrator_smoke/agent_2_output.json \
+  --template data/template.dxf \
+  --artifacts-dir data/end_to_end
 ```

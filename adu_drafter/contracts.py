@@ -340,8 +340,8 @@ class GeometryResolverInput(BaseModel):
     agent_1_output: Agent1Output
     agent_2_output: Agent2Output
     site_context: SiteContext
-    selected_zone: SelectedZone
-    selected_program: SelectedProgram
+    selected_zone: SelectedZone | None = None
+    selected_program: SelectedProgram | None = None
     design_rules: DesignRules
     existing_structures_passthrough: list[ExistingStructure] = Field(default_factory=list)
     input_coordinates_normalized_to_sw: bool
@@ -351,6 +351,10 @@ class GeometryResolverInput(BaseModel):
         if not self.input_coordinates_normalized_to_sw:
             raise ValueError("geometry resolver requires input_coordinates_normalized_to_sw=true")
         if not self.agent_1_output.conflict_flag:
+            if self.selected_zone is None:
+                raise ValueError("non-conflict resolver payload requires selected_zone")
+            if self.selected_program is None:
+                raise ValueError("non-conflict resolver payload requires selected_program")
             if self.agent_2_output.design_summary.zone_id != self.selected_zone.zone_id:
                 raise ValueError("agent_2_output zone_id must match selected_zone.zone_id")
             if self.agent_2_output.design_summary.program_id != self.selected_program.program_id:
@@ -684,6 +688,56 @@ def build_geometry_resolver_input(
         "design_rules": agent_2_input.design_rules.model_dump(mode="json"),
         "existing_structures_passthrough": [
             s.model_dump(mode="json") for s in (existing_structures_passthrough or [])
+        ],
+        "input_coordinates_normalized_to_sw": True,
+    }
+    return GeometryResolverInput.model_validate(payload)
+
+
+def build_conflict_geometry_resolver_input(
+    agent_1_input: Agent1Input,
+    agent_1_output: Agent1Output,
+    *,
+    input_coordinates_normalized_to_sw: bool = True,
+) -> GeometryResolverInput:
+    """
+    Build resolver payload for conflict mode so deterministic drawing can still proceed.
+    """
+    if not agent_1_output.conflict_flag:
+        raise ValueError("build_conflict_geometry_resolver_input requires conflict Agent1 output")
+    ensure_sw_normalized(input_coordinates_normalized_to_sw)
+
+    payload = {
+        "agent_1_output": agent_1_output.model_dump(mode="json"),
+        "agent_2_output": {
+            "agent": "adu-designer-agent-2",
+            "version": "1.0",
+            "conflict_flag": True,
+            "design_summary": {
+                "program_id": "conflict",
+                "zone_id": "conflict",
+                "layout_type": "conflict",
+            },
+            "rooms": [],
+            "walls_intent": [],
+            "openings_intent": [],
+            "notes": ["UPSTREAM_CONFLICT"],
+        },
+        "site_context": {
+            "lot_width_ft": agent_1_input.site_metadata.lot_width_ft,
+            "lot_depth_ft": agent_1_input.site_metadata.lot_depth_ft,
+            "street_frontage": agent_1_input.site_metadata.street_frontage,
+            "input_coordinates_normalized_to_sw": input_coordinates_normalized_to_sw,
+        },
+        "selected_zone": None,
+        "selected_program": None,
+        "design_rules": {
+            "grid_step_ft": 0.5,
+            "wall_thickness_options_ft": [0.35, 0.5],
+            "max_retry_iteration": 1,
+        },
+        "existing_structures_passthrough": [
+            s.model_dump(mode="json") for s in agent_1_input.existing_structures
         ],
         "input_coordinates_normalized_to_sw": True,
     }
