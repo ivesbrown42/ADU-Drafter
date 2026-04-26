@@ -286,19 +286,17 @@ def resolve_drawing_instructions(resolver_input: GeometryResolverInput) -> Drawi
         for i, text in enumerate(labels)
     ]
 
-    zone_polygon = resolver_input.selected_zone.zone_polygon_sw_origin
-    xs = [p[0] for p in zone_polygon]
-    ys = [p[1] for p in zone_polygon]
-    zone_sw_x, zone_sw_y = min(xs), min(ys)
-    zone_w, zone_h = max(xs) - min(xs), max(ys) - min(ys)
+    # Agent 2 local geometry is resolved relative to the finalized ADU footprint
+    # origin so interior drafting remains aligned with the selected shell.
+    local_origin_x, local_origin_y = adu_sw_x, adu_sw_y
 
     walls_abs: list[dict[str, Any]] = []
     wall_lines: dict[str, tuple[list[float], list[float]]] = {}
     for wall in resolver_input.agent_2_output.walls_intent:
-        sx = zone_sw_x + wall.start_local.x_ft
-        sy = zone_sw_y + wall.start_local.y_ft
-        ex = zone_sw_x + wall.end_local.x_ft
-        ey = zone_sw_y + wall.end_local.y_ft
+        sx = local_origin_x + wall.start_local.x_ft
+        sy = local_origin_y + wall.start_local.y_ft
+        ex = local_origin_x + wall.end_local.x_ft
+        ey = local_origin_y + wall.end_local.y_ft
         spt = _pt(sx, sy)
         ept = _pt(ex, ey)
         wall_lines[wall.wall_id] = (spt, ept)
@@ -321,8 +319,8 @@ def resolve_drawing_instructions(resolver_input: GeometryResolverInput) -> Drawi
                 "opening_type": opening.opening_type,
                 "wall_id": opening.wall_id,
                 "anchor": _pt(
-                    zone_sw_x + opening.anchor_local.x_ft,
-                    zone_sw_y + opening.anchor_local.y_ft,
+                    local_origin_x + opening.anchor_local.x_ft,
+                    local_origin_y + opening.anchor_local.y_ft,
                 ),
                 "width_ft": _r4(opening.width_ft),
             }

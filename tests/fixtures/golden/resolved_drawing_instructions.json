@@ -204,11 +204,53 @@
         "kind": "exterior",
         "start": [
           4.0,
-          80.0
+          86.0
         ],
         "end": [
           24.0,
-          80.0
+          86.0
+        ],
+        "thickness_ft": 0.5,
+        "layer": "SITE-ADU-FOOTPRINT"
+      },
+      {
+        "wall_id": "w-ext-right",
+        "kind": "exterior",
+        "start": [
+          24.0,
+          86.0
+        ],
+        "end": [
+          24.0,
+          116.0
+        ],
+        "thickness_ft": 0.5,
+        "layer": "SITE-ADU-FOOTPRINT"
+      },
+      {
+        "wall_id": "w-ext-top",
+        "kind": "exterior",
+        "start": [
+          24.0,
+          116.0
+        ],
+        "end": [
+          4.0,
+          116.0
+        ],
+        "thickness_ft": 0.5,
+        "layer": "SITE-ADU-FOOTPRINT"
+      },
+      {
+        "wall_id": "w-ext-left",
+        "kind": "exterior",
+        "start": [
+          4.0,
+          116.0
+        ],
+        "end": [
+          4.0,
+          86.0
         ],
         "thickness_ft": 0.5,
         "layer": "SITE-ADU-FOOTPRINT"
@@ -218,11 +260,39 @@
         "kind": "interior",
         "start": [
           4.0,
-          95.0
+          101.0
         ],
         "end": [
           24.0,
-          95.0
+          101.0
+        ],
+        "thickness_ft": 0.5,
+        "layer": "SITE-ADU-INTERIOR"
+      },
+      {
+        "wall_id": "w-int-kitchen",
+        "kind": "interior",
+        "start": [
+          16.0,
+          86.0
+        ],
+        "end": [
+          16.0,
+          101.0
+        ],
+        "thickness_ft": 0.5,
+        "layer": "SITE-ADU-INTERIOR"
+      },
+      {
+        "wall_id": "w-int-bath",
+        "kind": "interior",
+        "start": [
+          20.0,
+          101.0
+        ],
+        "end": [
+          20.0,
+          116.0
         ],
         "thickness_ft": 0.5,
         "layer": "SITE-ADU-INTERIOR"
@@ -230,12 +300,42 @@
     ],
     "openings_absolute": [
       {
-        "opening_id": "door-1",
+        "opening_id": "door-main",
+        "opening_type": "door",
+        "wall_id": "w-ext-bottom",
+        "anchor": [
+          12.0,
+          86.0
+        ],
+        "width_ft": 3.0
+      },
+      {
+        "opening_id": "door-bed",
         "opening_type": "door",
         "wall_id": "w-int-mid",
         "anchor": [
-          14.0,
-          95.0
+          10.0,
+          101.0
+        ],
+        "width_ft": 3.0
+      },
+      {
+        "opening_id": "door-kitchen",
+        "opening_type": "door",
+        "wall_id": "w-int-kitchen",
+        "anchor": [
+          16.0,
+          94.0
+        ],
+        "width_ft": 3.0
+      },
+      {
+        "opening_id": "door-bath",
+        "opening_type": "door",
+        "wall_id": "w-int-bath",
+        "anchor": [
+          20.0,
+          108.0
         ],
         "width_ft": 3.0
       }

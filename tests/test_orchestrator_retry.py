@@ -119,38 +119,119 @@ def _valid_agent2_output() -> dict:
         "agent": "adu-designer-agent-2",
         "version": "1.0",
         "conflict_flag": False,
-        "design_summary": {"program_id": "program-1", "zone_id": "zone-1", "layout_type": "split"},
+        "design_summary": {
+            "program_id": "program-1",
+            "zone_id": "zone-1",
+            "layout_type": "rectangular-1bed-1bath",
+        },
         "rooms": [
             {
-                "room_id": "r1",
+                "room_id": "living-1",
                 "room_type": "living",
-                "target_area_sf": 300.0,
-                "rect": {"x_ft": 0.0, "y_ft": 0.0, "width_ft": 20.0, "depth_ft": 15.0},
-                "adjacency": [],
+                "target_area_sf": 180.0,
+                "rect": {"x_ft": 0.0, "y_ft": 0.0, "width_ft": 12.0, "depth_ft": 15.0},
+                "adjacency": ["kitchen-1", "bed-1"],
             },
             {
-                "room_id": "r2",
+                "room_id": "kitchen-1",
+                "room_type": "kitchen",
+                "target_area_sf": 120.0,
+                "rect": {"x_ft": 12.0, "y_ft": 0.0, "width_ft": 8.0, "depth_ft": 15.0},
+                "adjacency": ["living-1", "bath-1"],
+            },
+            {
+                "room_id": "bed-1",
                 "room_type": "bedroom",
-                "target_area_sf": 300.0,
-                "rect": {"x_ft": 0.0, "y_ft": 15.0, "width_ft": 20.0, "depth_ft": 15.0},
-                "adjacency": [],
+                "target_area_sf": 240.0,
+                "rect": {"x_ft": 0.0, "y_ft": 15.0, "width_ft": 16.0, "depth_ft": 15.0},
+                "adjacency": ["living-1", "bath-1"],
+            },
+            {
+                "room_id": "bath-1",
+                "room_type": "bathroom",
+                "target_area_sf": 60.0,
+                "rect": {"x_ft": 16.0, "y_ft": 15.0, "width_ft": 4.0, "depth_ft": 15.0},
+                "adjacency": ["bed-1", "kitchen-1"],
             },
         ],
         "walls_intent": [
             {
-                "wall_id": "w1",
+                "wall_id": "w-ext-bottom",
+                "kind": "exterior",
+                "start_local": {"x_ft": 0.0, "y_ft": 0.0},
+                "end_local": {"x_ft": 20.0, "y_ft": 0.0},
+                "thickness_ft": 0.5,
+            },
+            {
+                "wall_id": "w-ext-right",
+                "kind": "exterior",
+                "start_local": {"x_ft": 20.0, "y_ft": 0.0},
+                "end_local": {"x_ft": 20.0, "y_ft": 30.0},
+                "thickness_ft": 0.5,
+            },
+            {
+                "wall_id": "w-ext-top",
+                "kind": "exterior",
+                "start_local": {"x_ft": 20.0, "y_ft": 30.0},
+                "end_local": {"x_ft": 0.0, "y_ft": 30.0},
+                "thickness_ft": 0.5,
+            },
+            {
+                "wall_id": "w-ext-left",
+                "kind": "exterior",
+                "start_local": {"x_ft": 0.0, "y_ft": 30.0},
+                "end_local": {"x_ft": 0.0, "y_ft": 0.0},
+                "thickness_ft": 0.5,
+            },
+            {
+                "wall_id": "w-int-mid",
                 "kind": "interior",
                 "start_local": {"x_ft": 0.0, "y_ft": 15.0},
                 "end_local": {"x_ft": 20.0, "y_ft": 15.0},
+                "thickness_ft": 0.5,
+            },
+            {
+                "wall_id": "w-int-kitchen",
+                "kind": "interior",
+                "start_local": {"x_ft": 12.0, "y_ft": 0.0},
+                "end_local": {"x_ft": 12.0, "y_ft": 15.0},
+                "thickness_ft": 0.5,
+            },
+            {
+                "wall_id": "w-int-bath",
+                "kind": "interior",
+                "start_local": {"x_ft": 16.0, "y_ft": 15.0},
+                "end_local": {"x_ft": 16.0, "y_ft": 30.0},
                 "thickness_ft": 0.5,
             }
         ],
         "openings_intent": [
             {
-                "opening_id": "o1",
-                "wall_id": "w1",
+                "opening_id": "door-main",
+                "wall_id": "w-ext-bottom",
                 "opening_type": "door",
-                "anchor_local": {"x_ft": 10.0, "y_ft": 15.0},
+                "anchor_local": {"x_ft": 8.0, "y_ft": 0.0},
+                "width_ft": 3.0,
+            },
+            {
+                "opening_id": "door-bed",
+                "wall_id": "w-int-mid",
+                "opening_type": "door",
+                "anchor_local": {"x_ft": 6.0, "y_ft": 15.0},
+                "width_ft": 3.0,
+            },
+            {
+                "opening_id": "door-kitchen",
+                "wall_id": "w-int-kitchen",
+                "opening_type": "door",
+                "anchor_local": {"x_ft": 12.0, "y_ft": 8.0},
+                "width_ft": 3.0,
+            },
+            {
+                "opening_id": "door-bath",
+                "wall_id": "w-int-bath",
+                "opening_type": "door",
+                "anchor_local": {"x_ft": 16.0, "y_ft": 22.0},
                 "width_ft": 3.0,
             }
         ],
@@ -168,7 +249,7 @@ def test_orchestrator_retry_exhausts_on_invalid_agent2(tmp_path: Path):
     _write(a1_in, _valid_agent1_input())
     _write(a1_out, _valid_agent1_output())
     invalid = _valid_agent2_output()
-    invalid["openings_intent"][0]["anchor_local"]["y_ft"] = 14.75  # not on host wall
+    invalid["openings_intent"][1]["anchor_local"]["y_ft"] = 14.75  # not on host wall
     _write(a2_out, invalid)
 
     args = Namespace(
@@ -232,7 +313,7 @@ def test_orchestrator_retry_succeeds_on_second_attempt(tmp_path: Path, monkeypat
     _write(a1_out, _valid_agent1_output())
 
     invalid = _valid_agent2_output()
-    invalid["openings_intent"][0]["anchor_local"]["y_ft"] = 14.75
+    invalid["openings_intent"][1]["anchor_local"]["y_ft"] = 14.75
     _write(a2_out, invalid)
 
     valid = _valid_agent2_output()

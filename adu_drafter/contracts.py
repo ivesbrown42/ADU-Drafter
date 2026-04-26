@@ -700,10 +700,16 @@ def validate_agent_2_output_against_input(agent_input: Agent2Input, agent_output
     zone_ys = [pt[1] for pt in agent_input.selected_zone.zone_polygon_sw_origin]
     zone_width_ft = max(zone_xs) - min(zone_xs)
     zone_depth_ft = max(zone_ys) - min(zone_ys)
+    footprint_width_ft = agent_input.selected_program.footprint_width_ft
+    footprint_depth_ft = agent_input.selected_program.footprint_depth_ft
     grid = agent_input.design_rules.grid_step_ft
 
     if zone_width_ft <= 0 or zone_depth_ft <= 0:
         raise ValueError("selected_zone has non-positive width/depth")
+    if footprint_width_ft > zone_width_ft + 1e-6 or footprint_depth_ft > zone_depth_ft + 1e-6:
+        raise ValueError(
+            "PROGRAM_EXCEEDS_ZONE: selected_program footprint exceeds selected_zone bounds"
+        )
 
     def _is_snapped(value: float) -> bool:
         # Accept tiny floating noise from JSON serialization/LLM formatting.
@@ -711,10 +717,20 @@ def validate_agent_2_output_against_input(agent_input: Agent2Input, agent_output
         return abs(quotient - round(quotient)) <= 1e-6
 
     def _validate_local_point(name: str, x: float, y: float) -> None:
-        if x < 0 or y < 0 or x > zone_width_ft or y > zone_depth_ft:
+        if x < 0 or y < 0 or x > footprint_width_ft or y > footprint_depth_ft:
             raise ValueError(f"{name} is outside zone-local bounds")
         if not _is_snapped(x) or not _is_snapped(y):
             raise ValueError(f"{name} is not snapped to grid_step_ft={grid}")
+
+    required_room_counts: dict[RoomType, int] = {
+        "bedroom": agent_input.selected_program.bedrooms,
+        "bathroom": agent_input.selected_program.bathrooms,
+        "kitchen": 1,
+        "living": 1,
+    }
+    room_type_counts: dict[RoomType, int] = {
+        room_type: 0 for room_type in required_room_counts
+    }
 
     room_ids: set[str] = set()
     room_rects: list[tuple[str, float, float, float, float]] = []
@@ -723,8 +739,10 @@ def validate_agent_2_output_against_input(agent_input: Agent2Input, agent_output
         if room.room_id in room_ids:
             raise ValueError(f"Duplicate room_id '{room.room_id}' in Agent2 output")
         room_ids.add(room.room_id)
+        if room.room_type in room_type_counts:
+            room_type_counts[room.room_type] += 1
         rect = room.rect
-        if rect.max_x > zone_width_ft or rect.max_y > zone_depth_ft:
+        if rect.max_x > footprint_width_ft or rect.max_y > footprint_depth_ft:
             raise ValueError(f"Room '{room.room_id}' extends outside selected zone bounds")
         if not all(
             _is_snapped(value)
@@ -735,6 +753,16 @@ def validate_agent_2_output_against_input(agent_input: Agent2Input, agent_output
             )
         total_room_area += rect.width_ft * rect.depth_ft
         room_rects.append((room.room_id, rect.x_ft, rect.y_ft, rect.max_x, rect.max_y))
+
+    for room_type, required_count in required_room_counts.items():
+        if required_count <= 0:
+            continue
+        actual_count = room_type_counts.get(room_type, 0)
+        if actual_count < required_count:
+            type_code = room_type.upper()
+            raise ValueError(
+                f"MISSING_{type_code}: requires >= {required_count} {room_type} room(s), got {actual_count}"
+            )
 
     # Room rectangles may touch at boundaries but must not overlap with positive area.
     for i in range(len(room_rects)):
@@ -752,6 +780,7 @@ def validate_agent_2_output_against_input(agent_input: Agent2Input, agent_output
 
     wall_ids: set[str] = set()
     wall_segments: dict[str, tuple[float, float, float, float]] = {}
+    exterior_segments: set[tuple[tuple[float, float], tuple[float, float]]] = set()
     for wall in agent_output.walls_intent:
         if wall.wall_id in wall_ids:
             raise ValueError(f"Duplicate wall_id '{wall.wall_id}' in Agent2 output")
@@ -773,6 +802,39 @@ def validate_agent_2_output_against_input(agent_input: Agent2Input, agent_output
             wall.start_local.y_ft,
             wall.end_local.x_ft,
             wall.end_local.y_ft,
+        )
+        if wall.kind == "exterior":
+            if abs(wall.start_local.x_ft - wall.end_local.x_ft) > 1e-9 and abs(
+                wall.start_local.y_ft - wall.end_local.y_ft
+            ) > 1e-9:
+                raise ValueError(
+                    f"EXTERIOR_WALL_NON_ORTHOGONAL: wall '{wall.wall_id}' must be axis-aligned"
+                )
+            normalized = tuple(
+                sorted(
+                    [
+                        (wall.start_local.x_ft, wall.start_local.y_ft),
+                        (wall.end_local.x_ft, wall.end_local.y_ft),
+                    ]
+                )
+            )
+            exterior_segments.add(normalized)
+
+    expected_exterior_segments = {
+        tuple(sorted([(0.0, 0.0), (footprint_width_ft, 0.0)])),
+        tuple(sorted([(footprint_width_ft, 0.0), (footprint_width_ft, footprint_depth_ft)])),
+        tuple(sorted([(footprint_width_ft, footprint_depth_ft), (0.0, footprint_depth_ft)])),
+        tuple(sorted([(0.0, footprint_depth_ft), (0.0, 0.0)])),
+    }
+    if exterior_segments != expected_exterior_segments:
+        missing = expected_exterior_segments - exterior_segments
+        extra = exterior_segments - expected_exterior_segments
+        if missing:
+            raise ValueError(
+                f"EXTERIOR_LOOP_OPEN: missing required exterior edges {sorted(missing)}"
+            )
+        raise ValueError(
+            f"EXTERIOR_LOOP_INVALID: unexpected exterior edges {sorted(extra)}"
         )
 
     for opening in agent_output.openings_intent:
@@ -805,6 +867,24 @@ def validate_agent_2_output_against_input(agent_input: Agent2Input, agent_output
         if dot < -1e-6 or dot - (length**2) > 1e-6:
             raise ValueError(
                 f"Opening '{opening.opening_id}' anchor falls outside host wall '{opening.wall_id}' segment"
+            )
+
+    def _point_on_room_boundary(rect: LocalRect, point: LocalPoint) -> bool:
+        x = point.x_ft
+        y = point.y_ft
+        on_left = abs(x - rect.x_ft) <= 1e-6 and rect.y_ft - 1e-6 <= y <= rect.max_y + 1e-6
+        on_right = abs(x - rect.max_x) <= 1e-6 and rect.y_ft - 1e-6 <= y <= rect.max_y + 1e-6
+        on_bottom = abs(y - rect.y_ft) <= 1e-6 and rect.x_ft - 1e-6 <= x <= rect.max_x + 1e-6
+        on_top = abs(y - rect.max_y) <= 1e-6 and rect.x_ft - 1e-6 <= x <= rect.max_x + 1e-6
+        return on_left or on_right or on_bottom or on_top
+
+    door_openings = [opening for opening in agent_output.openings_intent if opening.opening_type == "door"]
+    for room in agent_output.rooms:
+        if room.room_type == "storage":
+            continue
+        if not any(_point_on_room_boundary(room.rect, door.anchor_local) for door in door_openings):
+            raise ValueError(
+                f"ROOM_DISCONNECTED: room '{room.room_id}' has no door opening on its boundary"
             )
 
 
