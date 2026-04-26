@@ -493,7 +493,7 @@ $SKPOLY
   9
 $TDCREATE
  40
-2461157.9013310187
+2461157.940300926
   9
 $TDUCREATE
  40
@@ -501,7 +501,7 @@ $TDUCREATE
   9
 $TDUPDATE
  40
-2461157.9013310187
+2461157.940300926
   9
 $TDUUPDATE
  40
@@ -553,7 +553,7 @@ $SPLINESEGS
   9
 $HANDSEED
   5
-69
+71
   9
 $SURFTAB1
  70
@@ -937,7 +937,7 @@ $FINGERPRINTGUID
   9
 $VERSIONGUID
   2
-{6A8EA824-A113-4E3E-9F23-9F32CA28F34D}
+{EA7251CE-339B-49F4-A718-B5060FB6AF40}
   9
 $EXTNAMES
 290
@@ -3255,15 +3255,93 @@ AcDbPolyline
  10
 100.0
  20
--6.0
+0.0
  10
 120.0
  20
--6.0
+0.0
   0
 LWPOLYLINE
   5
 60
+330
+17
+100
+AcDbEntity
+  8
+A-WALL-EXTR
+100
+AcDbPolyline
+ 90
+2
+ 70
+0
+ 43
+0.5
+ 10
+120.0
+ 20
+0.0
+ 10
+120.0
+ 20
+30.0
+  0
+LWPOLYLINE
+  5
+61
+330
+17
+100
+AcDbEntity
+  8
+A-WALL-EXTR
+100
+AcDbPolyline
+ 90
+2
+ 70
+0
+ 43
+0.5
+ 10
+120.0
+ 20
+30.0
+ 10
+100.0
+ 20
+30.0
+  0
+LWPOLYLINE
+  5
+62
+330
+17
+100
+AcDbEntity
+  8
+A-WALL-EXTR
+100
+AcDbPolyline
+ 90
+2
+ 70
+0
+ 43
+0.5
+ 10
+100.0
+ 20
+30.0
+ 10
+100.0
+ 20
+0.0
+  0
+LWPOLYLINE
+  5
+63
 330
 17
 100
@@ -3281,15 +3359,67 @@ AcDbPolyline
  10
 100.0
  20
-9.0
+15.0
  10
 120.0
  20
-9.0
+15.0
+  0
+LWPOLYLINE
+  5
+64
+330
+17
+100
+AcDbEntity
+  8
+A-WALL-INTR
+100
+AcDbPolyline
+ 90
+2
+ 70
+0
+ 43
+0.5
+ 10
+112.0
+ 20
+0.0
+ 10
+112.0
+ 20
+15.0
+  0
+LWPOLYLINE
+  5
+65
+330
+17
+100
+AcDbEntity
+  8
+A-WALL-INTR
+100
+AcDbPolyline
+ 90
+2
+ 70
+0
+ 43
+0.5
+ 10
+116.0
+ 20
+15.0
+ 10
+116.0
+ 20
+30.0
   0
 CIRCLE
   5
-61
+66
 330
 17
 100
@@ -3299,9 +3429,69 @@ A-DOOR
 100
 AcDbCircle
  10
-110.0
+108.0
  20
-9.0
+0.0
+ 30
+0.0
+ 40
+0.3
+  0
+CIRCLE
+  5
+67
+330
+17
+100
+AcDbEntity
+  8
+A-DOOR
+100
+AcDbCircle
+ 10
+106.0
+ 20
+15.0
+ 30
+0.0
+ 40
+0.3
+  0
+CIRCLE
+  5
+68
+330
+17
+100
+AcDbEntity
+  8
+A-DOOR
+100
+AcDbCircle
+ 10
+112.0
+ 20
+8.0
+ 30
+0.0
+ 40
+0.3
+  0
+CIRCLE
+  5
+69
+330
+17
+100
+AcDbEntity
+  8
+A-DOOR
+100
+AcDbCircle
+ 10
+116.0
+ 20
+22.0
  30
 0.0
  40
@@ -3309,7 +3499,7 @@ AcDbCircle
   0
 TEXT
   5
-62
+6A
 330
 17
 100
@@ -3343,7 +3533,7 @@ AcDbText
   0
 TEXT
   5
-63
+6B
 330
 17
 100
@@ -3377,7 +3567,7 @@ AcDbText
   0
 LINE
   5
-64
+6C
 330
 17
 100
@@ -3401,7 +3591,7 @@ AcDbLine
   0
 TEXT
   5
-65
+6D
 330
 17
 100
@@ -3435,7 +3625,7 @@ AcDbText
   0
 LINE
   5
-66
+6E
 330
 17
 100
@@ -3459,7 +3649,7 @@ AcDbLine
   0
 TEXT
   5
-67
+6F
 330
 17
 100
@@ -3493,7 +3683,7 @@ AcDbText
   0
 TEXT
   5
-68
+70
 330
 17
 100
@@ -4539,7 +4729,7 @@ DictionaryVariables
 280
 0
   1
-1.4.3 @ 2026-04-26T21:37:55.538607+00:00
+1.4.3 @ 2026-04-26T22:34:02.317154+00:00
   0
 ENDSEC
   0
