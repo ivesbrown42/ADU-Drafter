@@ -23,6 +23,8 @@ ANNO_TEXT_LAYER = "A-ANNO-TEXT"
 ANNO_DIMS_LAYER = "A-ANNO-DIMS"
 FLOORPLAN_OFFSET_X = 100.0
 FLOORPLAN_OFFSET_Y = 0.0
+EXTERIOR_WALL_THICKNESS_FT = 0.5  # 6 in
+INTERIOR_WALL_THICKNESS_FT = 4.0 / 12.0  # 4 in total partition
 
 
 def _draw_walls(doc: ezdxf.document.Drawing, brief: ADUDesignBrief) -> None:
@@ -136,21 +138,6 @@ def _draw_line(
     doc.modelspace().add_line(p1, p2, dxfattribs={"layer": layer})
 
 
-def _draw_wall_segment_thick(
-    doc: ezdxf.document.Drawing,
-    *,
-    p1: tuple[float, float],
-    p2: tuple[float, float],
-    thickness_ft: float,
-    layer: str,
-) -> None:
-    _ensure_layer(doc, layer)
-    doc.modelspace().add_lwpolyline(
-        [p1, p2],
-        dxfattribs={"layer": layer, "const_width": thickness_ft},
-    )
-
-
 def _draw_wall_segment_offset_faces(
     doc: ezdxf.document.Drawing,
     *,
@@ -158,7 +145,14 @@ def _draw_wall_segment_offset_faces(
     p2: tuple[float, float],
     thickness_ft: float,
     layer: str,
+    clip_bounds: tuple[float, float, float, float] | None = None,
 ) -> None:
+    if clip_bounds is not None:
+        clipped = _clip_wall_centerline_to_bounds(p1, p2, clip_bounds)
+        if clipped is None:
+            return
+        p1, p2 = clipped
+
     # Render partition walls as two offset faces (2" each side for 4" total).
     dx = p2[0] - p1[0]
     dy = p2[1] - p1[1]
@@ -176,15 +170,37 @@ def _draw_wall_segment_offset_faces(
     _draw_line(doc, p1=b1, p2=b2, layer=layer)
 
 
-def _draw_exterior_shell(
-    doc: ezdxf.document.Drawing,
-    *,
+def _clip_wall_centerline_to_bounds(
+    p1: tuple[float, float],
+    p2: tuple[float, float],
+    bounds: tuple[float, float, float, float],
+) -> tuple[tuple[float, float], tuple[float, float]] | None:
+    """Clip orthogonal centerlines to inner shell bounds to prevent bleed."""
+    min_x, min_y, max_x, max_y = bounds
+    x1, y1 = p1
+    x2, y2 = p2
+
+    if abs(x2 - x1) >= abs(y2 - y1):  # horizontal
+        y = min(max((y1 + y2) / 2.0, min_y), max_y)
+        nx1 = min(max(x1, min_x), max_x)
+        nx2 = min(max(x2, min_x), max_x)
+        if abs(nx2 - nx1) < 1e-9:
+            return None
+        return ((nx1, y), (nx2, y))
+
+    # vertical
+    x = min(max((x1 + x2) / 2.0, min_x), max_x)
+    ny1 = min(max(y1, min_y), max_y)
+    ny2 = min(max(y2, min_y), max_y)
+    if abs(ny2 - ny1) < 1e-9:
+        return None
+    return ((x, ny1), (x, ny2))
+
+
+def _interior_shell_bounds(
     footprint_points: list[tuple[float, float]],
-    shell_thickness_ft: float = 0.5,  # 6 in
-) -> None:
-    # Draw outer face.
-    _draw_polyline(doc, footprint_points, WALL_EXTR_LAYER)
-    # Draw inner face as an inset rectangle for schematic wall thickness.
+    shell_thickness_ft: float,
+) -> tuple[float, float, float, float] | None:
     xs = [point[0] for point in footprint_points[:-1]]
     ys = [point[1] for point in footprint_points[:-1]]
     min_x, max_x = min(xs), max(xs)
@@ -193,7 +209,23 @@ def _draw_exterior_shell(
     inner_max_x = max_x - shell_thickness_ft
     inner_min_y = min_y + shell_thickness_ft
     inner_max_y = max_y - shell_thickness_ft
-    if inner_min_x < inner_max_x and inner_min_y < inner_max_y:
+    if inner_min_x >= inner_max_x or inner_min_y >= inner_max_y:
+        return None
+    return (inner_min_x, inner_min_y, inner_max_x, inner_max_y)
+
+
+def _draw_exterior_shell(
+    doc: ezdxf.document.Drawing,
+    *,
+    footprint_points: list[tuple[float, float]],
+    shell_thickness_ft: float = EXTERIOR_WALL_THICKNESS_FT,
+) -> None:
+    # Draw outer face.
+    _draw_polyline(doc, footprint_points, WALL_EXTR_LAYER)
+    # Draw inner face as an inset rectangle for schematic wall thickness.
+    inner_bounds = _interior_shell_bounds(footprint_points, shell_thickness_ft)
+    if inner_bounds is not None:
+        inner_min_x, inner_min_y, inner_max_x, inner_max_y = inner_bounds
         _draw_polyline(
             doc,
             [
@@ -312,7 +344,12 @@ def _draw_floor_plan_detail(
     _draw_exterior_shell(
         doc,
         footprint_points=_translate_points(footprint.points, dx=dx, dy=dy),
-        shell_thickness_ft=0.5,
+        shell_thickness_ft=EXTERIOR_WALL_THICKNESS_FT,
+    )
+
+    translated_footprint = _translate_points(footprint.points, dx=dx, dy=dy)
+    inner_bounds = _interior_shell_bounds(
+        translated_footprint, EXTERIOR_WALL_THICKNESS_FT
     )
 
     msp = doc.modelspace()
@@ -323,8 +360,9 @@ def _draw_floor_plan_detail(
             doc,
             p1=_translate_point(wall.start, dx=dx, dy=dy),
             p2=_translate_point(wall.end, dx=dx, dy=dy),
-            thickness_ft=0.3333,  # 4 in
+            thickness_ft=INTERIOR_WALL_THICKNESS_FT,
             layer=WALL_INTR_LAYER,
+            clip_bounds=inner_bounds,
         )
 
     for opening in instructions.adu_elements.openings_absolute:
@@ -358,7 +396,6 @@ def _draw_floor_plan_detail(
             height=0.8,
         )
 
-    translated_footprint = _translate_points(footprint.points, dx=dx, dy=dy)
     min_x = min(point[0] for point in translated_footprint)
     max_x = max(point[0] for point in translated_footprint)
     min_y = min(point[1] for point in translated_footprint)

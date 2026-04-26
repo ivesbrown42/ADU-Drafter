@@ -18,6 +18,21 @@ def _x_values_for_layer(path: str, layer: str) -> list[float]:
     return xs
 
 
+def _points_for_layer(path: str, layer: str) -> list[tuple[float, float]]:
+    doc = ezdxf.readfile(path)
+    msp = doc.modelspace()
+    points: list[tuple[float, float]] = []
+    for entity in msp:
+        if entity.dxf.layer != layer:
+            continue
+        if entity.dxftype() == "LWPOLYLINE":
+            points.extend((point[0], point[1]) for point in entity.get_points(format="xy"))
+        elif entity.dxftype() == "LINE":
+            points.append((entity.dxf.start.x, entity.dxf.start.y))
+            points.append((entity.dxf.end.x, entity.dxf.end.y))
+    return points
+
+
 def test_floorplan_offset_is_configurable(tmp_path) -> None:
     instructions = "tests/fixtures/golden/resolved_drawing_instructions.json"
     template = "data/template.dxf"
@@ -53,3 +68,26 @@ def test_floorplan_offset_is_configurable(tmp_path) -> None:
     # Site geometry remains anchored at origin regardless of floorplan offset.
     assert min(default_site_xs) == 0.0
     assert min(custom_site_xs) == 0.0
+
+
+def test_interior_walls_are_trimmed_to_inner_shell(tmp_path) -> None:
+    instructions = "tests/fixtures/golden/resolved_drawing_instructions.json"
+    template = "data/template.dxf"
+    out = tmp_path / "trimmed_interior.dxf"
+
+    generate_dxf_from_instruction_file(
+        instruction_path=instructions,
+        template_path=template,
+        output_path=out,
+        floorplan_origin_x=100.0,
+        floorplan_origin_y=0.0,
+    )
+
+    interior_points = _points_for_layer(str(out), "A-WALL-INTR")
+    assert interior_points, "Expected interior wall entities to be rendered"
+
+    # For the golden 20x30 footprint at origin (100,0), 6 in shell inset bounds are:
+    # x in [100.5, 119.5], y in [0.5, 29.5]
+    for x, y in interior_points:
+        assert 100.5 <= x <= 119.5
+        assert 0.5 <= y <= 29.5
