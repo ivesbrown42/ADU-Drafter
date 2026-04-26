@@ -33,6 +33,19 @@ def _points_for_layer(path: str, layer: str) -> list[tuple[float, float]]:
     return points
 
 
+def _count_layer_entities(path: str, layer: str, dxftype: str | None = None) -> int:
+    doc = ezdxf.readfile(path)
+    msp = doc.modelspace()
+    count = 0
+    for entity in msp:
+        if entity.dxf.layer != layer:
+            continue
+        if dxftype is not None and entity.dxftype() != dxftype:
+            continue
+        count += 1
+    return count
+
+
 def test_floorplan_offset_is_configurable(tmp_path) -> None:
     instructions = "tests/fixtures/golden/resolved_drawing_instructions.json"
     template = "data/template.dxf"
@@ -91,3 +104,23 @@ def test_interior_walls_are_trimmed_to_inner_shell(tmp_path) -> None:
     for x, y in interior_points:
         assert 100.5 <= x <= 119.5
         assert 0.5 <= y <= 29.5
+
+
+def test_interior_walls_render_as_merged_polygons(tmp_path) -> None:
+    instructions = "tests/fixtures/golden/resolved_drawing_instructions.json"
+    template = "data/template.dxf"
+    out = tmp_path / "merged_interior.dxf"
+
+    generate_dxf_from_instruction_file(
+        instruction_path=instructions,
+        template_path=template,
+        output_path=out,
+        floorplan_origin_x=100.0,
+        floorplan_origin_y=0.0,
+    )
+
+    # Unioned polygon boundaries are emitted as polylines.
+    intr_polylines = _count_layer_entities(str(out), "A-WALL-INTR", dxftype="LWPOLYLINE")
+    intr_lines = _count_layer_entities(str(out), "A-WALL-INTR", dxftype="LINE")
+    assert intr_polylines > 0
+    assert intr_lines == 0

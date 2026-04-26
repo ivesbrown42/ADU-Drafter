@@ -6,6 +6,8 @@ import argparse
 from pathlib import Path
 import sys
 import ezdxf
+from shapely.geometry import GeometryCollection, LineString, MultiPolygon, Polygon
+from shapely.ops import unary_union
 
 from .contracts import DrawingInstructionPayload, load_drawing_instruction_payload
 from .models import ADUDesignBrief
@@ -25,6 +27,7 @@ FLOORPLAN_OFFSET_X = 100.0
 FLOORPLAN_OFFSET_Y = 0.0
 EXTERIOR_WALL_THICKNESS_FT = 0.5  # 6 in
 INTERIOR_WALL_THICKNESS_FT = 4.0 / 12.0  # 4 in total partition
+OPENING_CUT_OVERTRIM_FT = 0.02
 
 
 def _draw_walls(doc: ezdxf.document.Drawing, brief: ADUDesignBrief) -> None:
@@ -138,38 +141,6 @@ def _draw_line(
     doc.modelspace().add_line(p1, p2, dxfattribs={"layer": layer})
 
 
-def _draw_wall_segment_offset_faces(
-    doc: ezdxf.document.Drawing,
-    *,
-    p1: tuple[float, float],
-    p2: tuple[float, float],
-    thickness_ft: float,
-    layer: str,
-    clip_bounds: tuple[float, float, float, float] | None = None,
-) -> None:
-    if clip_bounds is not None:
-        clipped = _clip_wall_centerline_to_bounds(p1, p2, clip_bounds)
-        if clipped is None:
-            return
-        p1, p2 = clipped
-
-    # Render partition walls as two offset faces (2" each side for 4" total).
-    dx = p2[0] - p1[0]
-    dy = p2[1] - p1[1]
-    seg_len = (dx * dx + dy * dy) ** 0.5
-    if seg_len == 0:
-        return
-    nx = -dy / seg_len
-    ny = dx / seg_len
-    half = thickness_ft / 2.0
-    a1 = (p1[0] + nx * half, p1[1] + ny * half)
-    a2 = (p2[0] + nx * half, p2[1] + ny * half)
-    b1 = (p1[0] - nx * half, p1[1] - ny * half)
-    b2 = (p2[0] - nx * half, p2[1] - ny * half)
-    _draw_line(doc, p1=a1, p2=a2, layer=layer)
-    _draw_line(doc, p1=b1, p2=b2, layer=layer)
-
-
 def _clip_wall_centerline_to_bounds(
     p1: tuple[float, float],
     p2: tuple[float, float],
@@ -212,6 +183,132 @@ def _interior_shell_bounds(
     if inner_min_x >= inner_max_x or inner_min_y >= inner_max_y:
         return None
     return (inner_min_x, inner_min_y, inner_max_x, inner_max_y)
+
+
+def _interior_wall_centerlines(
+    instructions: DrawingInstructionPayload,
+    *,
+    dx: float,
+    dy: float,
+    clip_bounds: tuple[float, float, float, float] | None,
+) -> dict[str, tuple[tuple[float, float], tuple[float, float]]]:
+    centerlines: dict[str, tuple[tuple[float, float], tuple[float, float]]] = {}
+    for wall in instructions.adu_elements.walls_absolute:
+        if wall.kind != "interior":
+            continue
+        p1 = _translate_point(wall.start, dx=dx, dy=dy)
+        p2 = _translate_point(wall.end, dx=dx, dy=dy)
+        if clip_bounds is not None:
+            clipped = _clip_wall_centerline_to_bounds(p1, p2, clip_bounds)
+            if clipped is None:
+                continue
+            p1, p2 = clipped
+        centerlines[wall.wall_id] = (p1, p2)
+    return centerlines
+
+
+def _opening_cut_polygon(
+    *,
+    anchor: tuple[float, float],
+    centerline: tuple[tuple[float, float], tuple[float, float]],
+    opening_width_ft: float,
+    wall_thickness_ft: float,
+) -> Polygon | None:
+    (x1, y1), (x2, y2) = centerline
+    dx = x2 - x1
+    dy = y2 - y1
+    seg_len = (dx * dx + dy * dy) ** 0.5
+    if seg_len == 0:
+        return None
+
+    ux, uy = dx / seg_len, dy / seg_len
+    nx, ny = -uy, ux
+    half_width = opening_width_ft / 2.0
+    half_thickness = (wall_thickness_ft / 2.0) + OPENING_CUT_OVERTRIM_FT
+    ax, ay = anchor
+
+    c1 = (ax - ux * half_width - nx * half_thickness, ay - uy * half_width - ny * half_thickness)
+    c2 = (ax + ux * half_width - nx * half_thickness, ay + uy * half_width - ny * half_thickness)
+    c3 = (ax + ux * half_width + nx * half_thickness, ay + uy * half_width + ny * half_thickness)
+    c4 = (ax - ux * half_width + nx * half_thickness, ay - uy * half_width + ny * half_thickness)
+    poly = Polygon([c1, c2, c3, c4, c1])
+    return poly if not poly.is_empty else None
+
+
+def _iter_polygons(geometry):
+    if geometry is None or geometry.is_empty:
+        return
+    if isinstance(geometry, Polygon):
+        yield geometry
+        return
+    if isinstance(geometry, MultiPolygon):
+        for poly in geometry.geoms:
+            if not poly.is_empty:
+                yield poly
+        return
+    if isinstance(geometry, GeometryCollection):
+        for geom in geometry.geoms:
+            yield from _iter_polygons(geom)
+
+
+def _draw_polygonal_boundaries(doc: ezdxf.document.Drawing, geometry, layer: str) -> None:
+    for poly in _iter_polygons(geometry):
+        _draw_polyline(
+            doc,
+            [(float(x), float(y)) for x, y in poly.exterior.coords],
+            layer,
+        )
+        for ring in poly.interiors:
+            _draw_polyline(
+                doc,
+                [(float(x), float(y)) for x, y in ring.coords],
+                layer,
+            )
+
+
+def _build_interior_wall_geometry(
+    instructions: DrawingInstructionPayload,
+    *,
+    dx: float,
+    dy: float,
+    clip_bounds: tuple[float, float, float, float] | None,
+) -> Polygon | MultiPolygon | GeometryCollection | None:
+    centerlines = _interior_wall_centerlines(
+        instructions, dx=dx, dy=dy, clip_bounds=clip_bounds
+    )
+    if not centerlines:
+        return None
+
+    half_thickness = INTERIOR_WALL_THICKNESS_FT / 2.0
+    wall_polygons = [
+        LineString([p1, p2]).buffer(
+            half_thickness,
+            cap_style=2,  # flat
+            join_style=2,  # mitre
+        )
+        for p1, p2 in centerlines.values()
+    ]
+    merged = unary_union(wall_polygons)
+    if merged.is_empty:
+        return None
+
+    opening_cuts: list[Polygon] = []
+    for opening in instructions.adu_elements.openings_absolute:
+        host_centerline = centerlines.get(opening.wall_id)
+        if host_centerline is None:
+            continue
+        cut = _opening_cut_polygon(
+            anchor=_translate_point(opening.anchor, dx=dx, dy=dy),
+            centerline=host_centerline,
+            opening_width_ft=opening.width_ft,
+            wall_thickness_ft=INTERIOR_WALL_THICKNESS_FT,
+        )
+        if cut is not None:
+            opening_cuts.append(cut)
+
+    if opening_cuts:
+        merged = merged.difference(unary_union(opening_cuts))
+    return merged
 
 
 def _draw_exterior_shell(
@@ -352,19 +449,15 @@ def _draw_floor_plan_detail(
         translated_footprint, EXTERIOR_WALL_THICKNESS_FT
     )
 
-    msp = doc.modelspace()
-    for wall in instructions.adu_elements.walls_absolute:
-        if wall.kind == "exterior":
-            continue
-        _draw_wall_segment_offset_faces(
-            doc,
-            p1=_translate_point(wall.start, dx=dx, dy=dy),
-            p2=_translate_point(wall.end, dx=dx, dy=dy),
-            thickness_ft=INTERIOR_WALL_THICKNESS_FT,
-            layer=WALL_INTR_LAYER,
-            clip_bounds=inner_bounds,
-        )
+    interior_wall_geometry = _build_interior_wall_geometry(
+        instructions,
+        dx=dx,
+        dy=dy,
+        clip_bounds=inner_bounds,
+    )
+    _draw_polygonal_boundaries(doc, interior_wall_geometry, WALL_INTR_LAYER)
 
+    msp = doc.modelspace()
     for opening in instructions.adu_elements.openings_absolute:
         anchor = _translate_point(opening.anchor, dx=dx, dy=dy)
         _ensure_layer(doc, DOOR_LAYER)
