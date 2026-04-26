@@ -1,0 +1,81 @@
+{
+  "agent": "adu-designer-agent-2",
+  "version": "1.0",
+  "conflict_flag": false,
+  "design_summary": {
+    "program_id": "program-1",
+    "zone_id": "zone-1",
+    "layout_type": "two-room-split"
+  },
+  "rooms": [
+    {
+      "room_id": "living-1",
+      "room_type": "living",
+      "target_area_sf": 300,
+      "rect": {
+        "x_ft": 0,
+        "y_ft": 0,
+        "width_ft": 20,
+        "depth_ft": 15
+      },
+      "adjacency": [
+        "bed-1"
+      ]
+    },
+    {
+      "room_id": "bed-1",
+      "room_type": "bedroom",
+      "target_area_sf": 300,
+      "rect": {
+        "x_ft": 0,
+        "y_ft": 15,
+        "width_ft": 20,
+        "depth_ft": 15
+      },
+      "adjacency": [
+        "living-1"
+      ]
+    }
+  ],
+  "walls_intent": [
+    {
+      "wall_id": "w-ext-bottom",
+      "kind": "exterior",
+      "start_local": {
+        "x_ft": 0,
+        "y_ft": 0
+      },
+      "end_local": {
+        "x_ft": 20,
+        "y_ft": 0
+      },
+      "thickness_ft": 0.5
+    },
+    {
+      "wall_id": "w-int-mid",
+      "kind": "interior",
+      "start_local": {
+        "x_ft": 0,
+        "y_ft": 15
+      },
+      "end_local": {
+        "x_ft": 20,
+        "y_ft": 15
+      },
+      "thickness_ft": 0.5
+    }
+  ],
+  "openings_intent": [
+    {
+      "opening_id": "door-1",
+      "wall_id": "w-int-mid",
+      "opening_type": "door",
+      "anchor_local": {
+        "x_ft": 10,
+        "y_ft": 15
+      },
+      "width_ft": 3
+    }
+  ],
+  "notes": []
+}

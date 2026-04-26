@@ -148,9 +148,38 @@ Run all deterministic steps in sequence:
 
 ```bash
 python3 -m adu_drafter.run_pipeline \
-  --agent-1-input data/orchestrator_smoke/agent_1_input.json \
-  --agent-1-output data/orchestrator_smoke/agent_1_output.json \
-  --agent-2-output data/orchestrator_smoke/agent_2_output.json \
+  --agent-1-input data/orchestrator_smoke_v2/agent_1_input.json \
+  --agent-1-output data/orchestrator_smoke_v2/agent_1_output.json \
+  --agent-2-output data/orchestrator_smoke_v2/agent_2_output.json \
   --template data/template.dxf \
-  --artifacts-dir data/end_to_end
+  --resolver-input-output data/end_to_end/geometry_resolver_input.json \
+  --resolved-instructions-output data/end_to_end/resolved_drawing_instructions.json \
+  --output-dxf data/end_to_end/generated_adu.dxf
 ```
+
+## Batch Evaluation Harness
+
+Run a tiered corpus and produce telemetry reports:
+
+```bash
+python3 scripts/run_evals.py \
+  --corpus data/eval_corpus.json \
+  --output-dir data/eval_reports/latest \
+  --template data/template.dxf \
+  --max-attempts 3
+```
+
+Outputs:
+
+- `data/eval_reports/latest/eval_report.json`
+- `data/eval_reports/latest/eval_report.csv`
+- per-case attempt artifacts in `data/eval_reports/latest/cases/`
+
+Example telemetry from sample corpus:
+
+- first-pass success rate
+- post-retry success rate
+- true-negative conflict rate
+- hard failure rate
+- average retries per success
+- top failure nodes (bounds/overlap/snap/host-wall/schema)

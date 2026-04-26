@@ -57,6 +57,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--max-retry-iteration", type=int, default=3)
     parser.add_argument(
+        "--schema-retries",
+        type=int,
+        default=3,
+        help="Schema/contract retries for orchestrator artifact validation.",
+    )
+    parser.add_argument(
+        "--retry-poll-seconds",
+        type=float,
+        default=0.0,
+        help="Sleep between orchestrator retry attempts.",
+    )
+    parser.add_argument(
         "--input-coordinates-normalized-to-sw",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -71,8 +83,8 @@ def run(args: argparse.Namespace) -> int:
         agent_2_output=args.agent_2_output,
         resolver_output=args.resolver_input_output,
         conflict_output=args.conflict_output,
-        schema_retries=args.max_retry_iteration,
-        retry_poll_seconds=2.0,
+        schema_retries=args.schema_retries,
+        retry_poll_seconds=args.retry_poll_seconds,
         grid_step_ft=args.grid_step_ft,
         wall_thickness_options_ft=args.wall_thickness_options_ft,
         max_retry_iteration=args.max_retry_iteration,
