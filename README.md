@@ -132,10 +132,15 @@ Render final DXF directly from `resolved_drawing_instructions.json`:
 python3 -m adu_drafter.drafter \
   --instructions data/resolved_drawing_instructions.json \
   --template data/template.dxf \
-  --output generated_adu_from_instructions.dxf
+  --output generated_adu_from_instructions.dxf \
+  --floorplan-origin-x 100 \
+  --floorplan-origin-y 0
 ```
 
 This path does not depend on LLMs once contracts are validated.
+
+`--floorplan-origin-x` / `--floorplan-origin-y` let you place the enlarged
+floor-plan detail safely outside the site-plan extents in the same modelspace.
 
 ## One-Command End-to-End Runner
 
@@ -154,7 +159,9 @@ python3 -m adu_drafter.run_pipeline \
   --template data/template.dxf \
   --resolver-input-output data/end_to_end/geometry_resolver_input.json \
   --resolved-instructions-output data/end_to_end/resolved_drawing_instructions.json \
-  --output-dxf data/end_to_end/generated_adu.dxf
+  --output-dxf data/end_to_end/generated_adu.dxf \
+  --floorplan-origin-x 100 \
+  --floorplan-origin-y 0
 ```
 
 ## Batch Evaluation Harness

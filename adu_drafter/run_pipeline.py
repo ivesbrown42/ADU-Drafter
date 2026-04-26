@@ -48,6 +48,18 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path("generated_adu.dxf"),
         help="Output DXF path for rendered instructions.",
     )
+    parser.add_argument(
+        "--floorplan-origin-x",
+        type=float,
+        default=100.0,
+        help="X origin for enlarged floor-plan detail in modelspace.",
+    )
+    parser.add_argument(
+        "--floorplan-origin-y",
+        type=float,
+        default=0.0,
+        help="Y origin for enlarged floor-plan detail in modelspace.",
+    )
     parser.add_argument("--grid-step-ft", type=float, default=0.5)
     parser.add_argument(
         "--wall-thickness-options-ft",
@@ -77,6 +89,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def run(args: argparse.Namespace) -> int:
+    floorplan_origin_x = getattr(args, "floorplan_origin_x", 100.0)
+    floorplan_origin_y = getattr(args, "floorplan_origin_y", 0.0)
+
     orchestration_args = argparse.Namespace(
         agent_1_input=args.agent_1_input,
         agent_1_output=args.agent_1_output,
@@ -107,6 +122,8 @@ def run(args: argparse.Namespace) -> int:
         instruction_path=args.resolved_instructions_output,
         template_path=args.template,
         output_path=args.output_dxf,
+        floorplan_origin_x=floorplan_origin_x,
+        floorplan_origin_y=floorplan_origin_y,
     )
     print(f"Wrote end-to-end DXF to {args.output_dxf}")
     return 0

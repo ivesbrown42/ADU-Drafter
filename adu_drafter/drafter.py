@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
+import sys
 import ezdxf
 
 from .contracts import DrawingInstructionPayload, load_drawing_instruction_payload
@@ -303,6 +305,8 @@ def generate_dxf_from_instructions(
     *,
     template_path: Path | str,
     output_path: Path | str,
+    floorplan_origin_x: float = FLOORPLAN_OFFSET_X,
+    floorplan_origin_y: float = FLOORPLAN_OFFSET_Y,
 ) -> Path:
     """
     Render deterministic resolved drawing instructions into a DXF artifact.
@@ -317,7 +321,12 @@ def generate_dxf_from_instructions(
 
     doc = ezdxf.readfile(template_path)
     _draw_site_context(doc, instructions)
-    _draw_floor_plan_detail(doc, instructions)
+    _draw_floor_plan_detail(
+        doc,
+        instructions,
+        floorplan_origin_x=floorplan_origin_x,
+        floorplan_origin_y=floorplan_origin_y,
+    )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     doc.saveas(output_path)
@@ -329,6 +338,8 @@ def generate_dxf_from_instruction_file(
     *,
     template_path: Path | str,
     output_path: Path | str,
+    floorplan_origin_x: float = FLOORPLAN_OFFSET_X,
+    floorplan_origin_y: float = FLOORPLAN_OFFSET_Y,
 ) -> Path:
     """Load DrawingInstructionPayload from JSON file and render DXF."""
     instructions = load_drawing_instruction_payload(instruction_path)
@@ -336,4 +347,75 @@ def generate_dxf_from_instruction_file(
         instructions,
         template_path=template_path,
         output_path=output_path,
+        floorplan_origin_x=floorplan_origin_x,
+        floorplan_origin_y=floorplan_origin_y,
     )
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Render deterministic drawing instructions into a DXF."
+    )
+    parser.add_argument(
+        "--instructions",
+        type=Path,
+        required=True,
+        help="Path to resolved_drawing_instructions.json payload.",
+    )
+    parser.add_argument(
+        "--template",
+        type=Path,
+        default=Path("data/template.dxf"),
+        help="Path to static DXF template for rendering.",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("generated_adu_from_instructions.dxf"),
+        help="Output DXF path.",
+    )
+    parser.add_argument(
+        "--floorplan-origin-x",
+        type=float,
+        default=FLOORPLAN_OFFSET_X,
+        help=(
+            "X origin for the enlarged floor-plan detail in modelspace. "
+            "Site plan remains anchored at (0,0)."
+        ),
+    )
+    parser.add_argument(
+        "--floorplan-origin-y",
+        type=float,
+        default=FLOORPLAN_OFFSET_Y,
+        help=(
+            "Y origin for the enlarged floor-plan detail in modelspace. "
+            "Site plan remains anchored at (0,0)."
+        ),
+    )
+    return parser
+
+
+def run(args: argparse.Namespace) -> int:
+    generate_dxf_from_instruction_file(
+        instruction_path=args.instructions,
+        template_path=args.template,
+        output_path=args.output,
+        floorplan_origin_x=args.floorplan_origin_x,
+        floorplan_origin_y=args.floorplan_origin_y,
+    )
+    print(f"Wrote DXF to {args.output}")
+    return 0
+
+
+def main() -> None:
+    parser = build_parser()
+    args = parser.parse_args()
+    try:
+        raise SystemExit(run(args))
+    except Exception as exc:  # pylint: disable=broad-except
+        print(f"ERROR: {exc}", file=sys.stderr)
+        raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    main()

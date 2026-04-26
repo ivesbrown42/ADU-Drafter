@@ -61,6 +61,9 @@ def _attempt_run(
     resolved_instructions = attempt_dir / "resolved_drawing_instructions.json"
     conflict_artifact = attempt_dir / "conflict_artifact.json"
     output_dxf = attempt_dir / "generated_adu.dxf"
+    resolved_instructions.unlink(missing_ok=True)
+    conflict_artifact.unlink(missing_ok=True)
+    output_dxf.unlink(missing_ok=True)
 
     args = argparse.Namespace(
         agent_1_input=Path(case["agent_1_input"]),
@@ -79,6 +82,8 @@ def _attempt_run(
         input_coordinates_normalized_to_sw=bool(
             case.get("input_coordinates_normalized_to_sw", True)
         ),
+        floorplan_origin_x=float(case.get("floorplan_origin_x", 100.0)),
+        floorplan_origin_y=float(case.get("floorplan_origin_y", 0.0)),
     )
 
     error_message = ""
