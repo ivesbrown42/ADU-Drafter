@@ -8,7 +8,22 @@ import ezdxf
 
 
 def ensure_layers(doc: ezdxf.document.Drawing) -> None:
-    for layer_name in ("A-WALL", "A-WALL-INT", "A-DOOR", "A-FIXT", "A-FURN"):
+    for layer_name in (
+        "A-WALL",
+        "A-WALL-INT",
+        "A-DOOR",
+        "A-FIXT",
+        "A-FURN",
+        "A-SITE-BNDY",
+        "A-SITE-SETB",
+        "A-SITE-EXST",
+        "A-SITE-PROP",
+        "A-SITE-ANNO",
+        "A-WALL-EXTR",
+        "A-WALL-INTR",
+        "A-ANNO-TEXT",
+        "A-ANNO-DIMS",
+    ):
         if layer_name not in doc.layers:
             doc.layers.add(layer_name)
 

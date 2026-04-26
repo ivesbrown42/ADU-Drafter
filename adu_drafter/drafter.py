@@ -9,6 +9,20 @@ from .contracts import DrawingInstructionPayload, load_drawing_instruction_paylo
 from .models import ADUDesignBrief
 
 
+SITE_BNDY_LAYER = "A-SITE-BNDY"
+SITE_SETB_LAYER = "A-SITE-SETB"
+SITE_EXST_LAYER = "A-SITE-EXST"
+SITE_PROP_LAYER = "A-SITE-PROP"
+SITE_ANNO_LAYER = "A-SITE-ANNO"
+WALL_EXTR_LAYER = "A-WALL-EXTR"
+WALL_INTR_LAYER = "A-WALL-INTR"
+DOOR_LAYER = "A-DOOR"
+ANNO_TEXT_LAYER = "A-ANNO-TEXT"
+ANNO_DIMS_LAYER = "A-ANNO-DIMS"
+FLOORPLAN_OFFSET_X = 100.0
+FLOORPLAN_OFFSET_Y = 0.0
+
+
 def _draw_walls(doc: ezdxf.document.Drawing, brief: ADUDesignBrief) -> None:
     msp = doc.modelspace()
     for wall in brief.walls:
@@ -97,6 +111,193 @@ def _draw_text(
     entity.set_placement(anchor, align=ezdxf.enums.TextEntityAlignment.MIDDLE_CENTER)
 
 
+def _translate_point(
+    point: tuple[float, float], *, dx: float, dy: float
+) -> tuple[float, float]:
+    return (point[0] + dx, point[1] + dy)
+
+
+def _translate_points(
+    points: list[tuple[float, float]], *, dx: float, dy: float
+) -> list[tuple[float, float]]:
+    return [_translate_point(point, dx=dx, dy=dy) for point in points]
+
+
+def _draw_line(
+    doc: ezdxf.document.Drawing,
+    *,
+    p1: tuple[float, float],
+    p2: tuple[float, float],
+    layer: str,
+) -> None:
+    _ensure_layer(doc, layer)
+    doc.modelspace().add_line(p1, p2, dxfattribs={"layer": layer})
+
+
+def _draw_site_context(doc: ezdxf.document.Drawing, instructions: DrawingInstructionPayload) -> None:
+    _draw_polyline(doc, instructions.lot_boundary.points, SITE_BNDY_LAYER)
+    _draw_polyline(doc, instructions.setback_boundary.points, SITE_SETB_LAYER)
+
+    for struct in instructions.existing_structures:
+        _draw_polyline(doc, struct.points, SITE_EXST_LAYER)
+        _draw_text(
+            doc,
+            text=struct.label_text,
+            anchor=struct.label_anchor,
+            layer=SITE_EXST_LAYER,
+            height=struct.label_height,
+        )
+
+    if instructions.adu_elements is not None:
+        _draw_polyline(doc, instructions.adu_elements.footprint.points, SITE_PROP_LAYER)
+        _draw_polyline(doc, instructions.adu_elements.separation_zone.points, SITE_PROP_LAYER)
+        for label in instructions.adu_elements.label_lines:
+            _draw_text(
+                doc,
+                text=label.text,
+                anchor=label.anchor,
+                layer=SITE_PROP_LAYER,
+                height=label.height,
+            )
+
+    if instructions.conflict_notice is not None:
+        _draw_text(
+            doc,
+            text=instructions.conflict_notice.line1.text,
+            anchor=instructions.conflict_notice.line1.anchor,
+            layer=SITE_ANNO_LAYER,
+            height=instructions.conflict_notice.line1.height,
+        )
+        _draw_text(
+            doc,
+            text=instructions.conflict_notice.line2.text,
+            anchor=instructions.conflict_notice.line2.anchor,
+            layer=SITE_ANNO_LAYER,
+            height=instructions.conflict_notice.line2.height,
+        )
+
+    _draw_text(
+        doc,
+        text=instructions.street_label.text,
+        anchor=instructions.street_label.anchor,
+        layer=SITE_ANNO_LAYER,
+        height=instructions.street_label.height,
+    )
+
+    msp = doc.modelspace()
+    for marker in instructions.separation_compliance_markers:
+        _ensure_layer(doc, SITE_ANNO_LAYER)
+        msp.add_circle(
+            marker.circle_center,
+            radius=marker.circle_radius,
+            dxfattribs={"layer": SITE_ANNO_LAYER, "color": marker.circle_color},
+        )
+        _draw_text(
+            doc,
+            text=marker.text,
+            anchor=marker.text_anchor,
+            layer=SITE_ANNO_LAYER,
+            height=marker.text_height,
+        )
+
+    for dim in instructions.dimensions:
+        if dim.id not in {"LOT_WIDTH", "LOT_DEPTH"}:
+            continue
+        _draw_line(doc, p1=dim.p1, p2=dim.p2, layer=SITE_ANNO_LAYER)
+        _draw_text(
+            doc,
+            text=dim.text,
+            anchor=dim.dimline_position,
+            layer=SITE_ANNO_LAYER,
+            height=0.8,
+        )
+
+    _draw_text(
+        doc,
+        text="SITE PLAN",
+        anchor=(instructions.lot_boundary.points[1][0] / 2.0, instructions.lot_boundary.points[2][1] + 10.0),
+        layer=SITE_ANNO_LAYER,
+        height=1.5,
+    )
+
+
+def _draw_floor_plan_detail(
+    doc: ezdxf.document.Drawing,
+    instructions: DrawingInstructionPayload,
+    *,
+    floorplan_origin_x: float = FLOORPLAN_OFFSET_X,
+    floorplan_origin_y: float = FLOORPLAN_OFFSET_Y,
+) -> None:
+    if instructions.adu_elements is None:
+        return
+
+    footprint = instructions.adu_elements.footprint
+    source_sw_x, source_sw_y = footprint.sw_corner
+    dx = floorplan_origin_x - source_sw_x
+    dy = floorplan_origin_y - source_sw_y
+
+    _draw_polyline(
+        doc,
+        _translate_points(footprint.points, dx=dx, dy=dy),
+        WALL_EXTR_LAYER,
+    )
+
+    msp = doc.modelspace()
+    for wall in instructions.adu_elements.walls_absolute:
+        layer = WALL_EXTR_LAYER if wall.kind == "exterior" else WALL_INTR_LAYER
+        _ensure_layer(doc, layer)
+        msp.add_lwpolyline(
+            [
+                _translate_point(wall.start, dx=dx, dy=dy),
+                _translate_point(wall.end, dx=dx, dy=dy),
+            ],
+            dxfattribs={"layer": layer, "const_width": wall.thickness_ft},
+        )
+
+    for opening in instructions.adu_elements.openings_absolute:
+        anchor = _translate_point(opening.anchor, dx=dx, dy=dy)
+        _ensure_layer(doc, DOOR_LAYER)
+        msp.add_circle(anchor, radius=0.3, dxfattribs={"layer": DOOR_LAYER})
+
+    for label in instructions.adu_elements.label_lines:
+        _draw_text(
+            doc,
+            text=label.text,
+            anchor=_translate_point(label.anchor, dx=dx, dy=dy),
+            layer=ANNO_TEXT_LAYER,
+            height=label.height,
+        )
+
+    for dim in instructions.dimensions:
+        if dim.id not in {"ADU_WIDTH", "ADU_DEPTH"}:
+            continue
+        _draw_line(
+            doc,
+            p1=_translate_point(dim.p1, dx=dx, dy=dy),
+            p2=_translate_point(dim.p2, dx=dx, dy=dy),
+            layer=ANNO_DIMS_LAYER,
+        )
+        _draw_text(
+            doc,
+            text=dim.text,
+            anchor=_translate_point(dim.dimline_position, dx=dx, dy=dy),
+            layer=ANNO_DIMS_LAYER,
+            height=0.8,
+        )
+
+    translated_footprint = _translate_points(footprint.points, dx=dx, dy=dy)
+    min_x = min(point[0] for point in translated_footprint)
+    max_x = max(point[0] for point in translated_footprint)
+    max_y = max(point[1] for point in translated_footprint)
+    _draw_text(
+        doc,
+        text="ADU FLOOR PLAN",
+        anchor=((min_x + max_x) / 2.0, max_y + 10.0),
+        layer=ANNO_TEXT_LAYER,
+        height=1.5,
+    )
+
+
 def generate_dxf_from_instructions(
     instructions: DrawingInstructionPayload,
     *,
@@ -115,102 +316,8 @@ def generate_dxf_from_instructions(
         )
 
     doc = ezdxf.readfile(template_path)
-    msp = doc.modelspace()
-
-    _draw_polyline(doc, instructions.lot_boundary.points, instructions.lot_boundary.layer)
-    _draw_polyline(doc, instructions.setback_boundary.points, instructions.setback_boundary.layer)
-
-    for struct in instructions.existing_structures:
-        _draw_polyline(doc, struct.points, struct.layer)
-        _draw_text(
-            doc,
-            text=struct.label_text,
-            anchor=struct.label_anchor,
-            layer=struct.layer,
-            height=struct.label_height,
-        )
-
-    if instructions.adu_elements is not None:
-        _draw_polyline(
-            doc,
-            instructions.adu_elements.footprint.points,
-            instructions.adu_elements.footprint.layer,
-        )
-        _draw_polyline(
-            doc,
-            instructions.adu_elements.separation_zone.points,
-            instructions.adu_elements.separation_zone.layer,
-        )
-
-        for label in instructions.adu_elements.label_lines:
-            _draw_text(
-                doc,
-                text=label.text,
-                anchor=label.anchor,
-                layer=label.layer,
-                height=label.height,
-            )
-
-        for wall in instructions.adu_elements.walls_absolute:
-            _ensure_layer(doc, wall.layer)
-            msp.add_lwpolyline(
-                [wall.start, wall.end],
-                dxfattribs={"layer": wall.layer, "const_width": wall.thickness_ft},
-            )
-
-        for opening in instructions.adu_elements.openings_absolute:
-            _ensure_layer(doc, "SITE-ADU-OPENINGS")
-            msp.add_circle(opening.anchor, radius=0.3, dxfattribs={"layer": "SITE-ADU-OPENINGS"})
-
-    if instructions.conflict_notice is not None:
-        _draw_text(
-            doc,
-            text=instructions.conflict_notice.line1.text,
-            anchor=instructions.conflict_notice.line1.anchor,
-            layer=instructions.conflict_notice.line1.layer,
-            height=instructions.conflict_notice.line1.height,
-        )
-        _draw_text(
-            doc,
-            text=instructions.conflict_notice.line2.text,
-            anchor=instructions.conflict_notice.line2.anchor,
-            layer=instructions.conflict_notice.line2.layer,
-            height=instructions.conflict_notice.line2.height,
-        )
-
-    for dim in instructions.dimensions:
-        _ensure_layer(doc, dim.layer)
-        msp.add_line(dim.p1, dim.p2, dxfattribs={"layer": dim.layer})
-        _draw_text(
-            doc,
-            text=dim.text,
-            anchor=dim.dimline_position,
-            layer=dim.layer,
-            height=0.8,
-        )
-
-    _draw_text(
-        doc,
-        text=instructions.street_label.text,
-        anchor=instructions.street_label.anchor,
-        layer=instructions.street_label.layer,
-        height=instructions.street_label.height,
-    )
-
-    for marker in instructions.separation_compliance_markers:
-        _ensure_layer(doc, marker.layer)
-        msp.add_circle(
-            marker.circle_center,
-            radius=marker.circle_radius,
-            dxfattribs={"layer": marker.layer, "color": marker.circle_color},
-        )
-        _draw_text(
-            doc,
-            text=marker.text,
-            anchor=marker.text_anchor,
-            layer=marker.layer,
-            height=marker.text_height,
-        )
+    _draw_site_context(doc, instructions)
+    _draw_floor_plan_detail(doc, instructions)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     doc.saveas(output_path)

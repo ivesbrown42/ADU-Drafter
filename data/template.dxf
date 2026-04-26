@@ -493,7 +493,7 @@ $SKPOLY
   9
 $TDCREATE
  40
-2461155.1627199072
+2461157.8969444446
   9
 $TDUCREATE
  40
@@ -501,7 +501,7 @@ $TDUCREATE
   9
 $TDUPDATE
  40
-2461155.1627199072
+2461157.8969444446
   9
 $TDUUPDATE
  40
@@ -553,7 +553,7 @@ $SPLINESEGS
   9
 $HANDSEED
   5
-45
+4E
   9
 $SURFTAB1
  70
@@ -933,11 +933,11 @@ $PSTYLEMODE
   9
 $FINGERPRINTGUID
   2
-{3BFAE902-7826-4EC3-981E-C9D5ABBBDE2F}
+{E1D7D9AB-C997-4D96-85A3-87519902282D}
   9
 $VERSIONGUID
   2
-{A672A168-7E93-4E21-BC0F-0CD584D73995}
+{196A79C1-BB96-4722-9287-24C4B657138F}
   9
 $EXTNAMES
 290
@@ -1553,7 +1553,7 @@ LAYER
 100
 AcDbSymbolTable
  70
-7
+16
   0
 LAYER
   5
@@ -1725,6 +1725,222 @@ Continuous
 347
 21
   0
+LAYER
+  5
+34
+330
+1
+100
+AcDbSymbolTableRecord
+100
+AcDbLayerTableRecord
+  2
+A-SITE-BNDY
+ 70
+0
+ 62
+7
+  6
+Continuous
+370
+-3
+390
+13
+347
+21
+  0
+LAYER
+  5
+35
+330
+1
+100
+AcDbSymbolTableRecord
+100
+AcDbLayerTableRecord
+  2
+A-SITE-SETB
+ 70
+0
+ 62
+7
+  6
+Continuous
+370
+-3
+390
+13
+347
+21
+  0
+LAYER
+  5
+36
+330
+1
+100
+AcDbSymbolTableRecord
+100
+AcDbLayerTableRecord
+  2
+A-SITE-EXST
+ 70
+0
+ 62
+7
+  6
+Continuous
+370
+-3
+390
+13
+347
+21
+  0
+LAYER
+  5
+37
+330
+1
+100
+AcDbSymbolTableRecord
+100
+AcDbLayerTableRecord
+  2
+A-SITE-PROP
+ 70
+0
+ 62
+7
+  6
+Continuous
+370
+-3
+390
+13
+347
+21
+  0
+LAYER
+  5
+38
+330
+1
+100
+AcDbSymbolTableRecord
+100
+AcDbLayerTableRecord
+  2
+A-SITE-ANNO
+ 70
+0
+ 62
+7
+  6
+Continuous
+370
+-3
+390
+13
+347
+21
+  0
+LAYER
+  5
+39
+330
+1
+100
+AcDbSymbolTableRecord
+100
+AcDbLayerTableRecord
+  2
+A-WALL-EXTR
+ 70
+0
+ 62
+7
+  6
+Continuous
+370
+-3
+390
+13
+347
+21
+  0
+LAYER
+  5
+3A
+330
+1
+100
+AcDbSymbolTableRecord
+100
+AcDbLayerTableRecord
+  2
+A-WALL-INTR
+ 70
+0
+ 62
+7
+  6
+Continuous
+370
+-3
+390
+13
+347
+21
+  0
+LAYER
+  5
+3B
+330
+1
+100
+AcDbSymbolTableRecord
+100
+AcDbLayerTableRecord
+  2
+A-ANNO-TEXT
+ 70
+0
+ 62
+7
+  6
+Continuous
+370
+-3
+390
+13
+347
+21
+  0
+LAYER
+  5
+3C
+330
+1
+100
+AcDbSymbolTableRecord
+100
+AcDbLayerTableRecord
+  2
+A-ANNO-DIMS
+ 70
+0
+ 62
+7
+  6
+Continuous
+370
+-3
+390
+13
+347
+21
+  0
 ENDTAB
   0
 TABLE
@@ -1825,7 +2041,7 @@ ACAD
   0
 APPID
   5
-42
+4B
 330
 3
 100
@@ -1839,7 +2055,7 @@ HATCHBACKGROUNDCOLOR
   0
 APPID
   5
-43
+4C
 330
 3
 100
@@ -2059,7 +2275,7 @@ AcDbBlockTableRecord
   0
 BLOCK_RECORD
   5
-34
+3D
 330
 9
 100
@@ -2079,7 +2295,7 @@ DOOR_SINGLE_36
   0
 BLOCK_RECORD
   5
-39
+42
 330
 9
 100
@@ -2099,7 +2315,7 @@ TOILET_STANDARD
   0
 BLOCK_RECORD
   5
-3E
+47
 330
 9
 100
@@ -2203,9 +2419,9 @@ AcDbBlockEnd
   0
 BLOCK
   5
-35
+3E
 330
-34
+3D
 100
 AcDbEntity
   8
@@ -2229,9 +2445,9 @@ DOOR_SINGLE_36
   0
 LINE
   5
-37
+40
 330
-34
+3D
 100
 AcDbEntity
   8
@@ -2253,9 +2469,9 @@ AcDbLine
   0
 ARC
   5
-38
+41
 330
-34
+3D
 100
 AcDbEntity
   8
@@ -2279,9 +2495,9 @@ AcDbArc
   0
 ENDBLK
   5
-36
+3F
 330
-34
+3D
 100
 AcDbEntity
   8
@@ -2291,9 +2507,9 @@ AcDbBlockEnd
   0
 BLOCK
   5
-3A
+43
 330
-39
+42
 100
 AcDbEntity
   8
@@ -2317,9 +2533,9 @@ TOILET_STANDARD
   0
 ELLIPSE
   5
-3C
+45
 330
-39
+42
 100
 AcDbEntity
   8
@@ -2347,9 +2563,9 @@ AcDbEllipse
   0
 LINE
   5
-3D
+46
 330
-39
+42
 100
 AcDbEntity
   8
@@ -2371,9 +2587,9 @@ AcDbLine
   0
 ENDBLK
   5
-3B
+44
 330
-39
+42
 100
 AcDbEntity
   8
@@ -2383,9 +2599,9 @@ AcDbBlockEnd
   0
 BLOCK
   5
-3F
+48
 330
-3E
+47
 100
 AcDbEntity
   8
@@ -2409,9 +2625,9 @@ KITCHEN_ISLAND_SMALL
   0
 LWPOLYLINE
   5
-41
+4A
 330
-3E
+47
 100
 AcDbEntity
   8
@@ -2445,9 +2661,9 @@ AcDbPolyline
   0
 ENDBLK
   5
-40
+49
 330
-3E
+47
 100
 AcDbEntity
   8
@@ -3451,7 +3667,7 @@ CREATED_BY_EZDXF
   3
 WRITTEN_BY_EZDXF
 350
-44
+4D
   0
 DICTIONARYVAR
   5
@@ -3463,11 +3679,11 @@ DictionaryVariables
 280
 0
   1
-1.4.3 @ 2026-04-24T03:54:19.224798+00:00
+1.4.3 @ 2026-04-26T21:31:36.883295+00:00
   0
 DICTIONARYVAR
   5
-44
+4D
 330
 2D
 100
@@ -3475,7 +3691,7 @@ DictionaryVariables
 280
 0
   1
-1.4.3 @ 2026-04-24T03:54:19.225835+00:00
+1.4.3 @ 2026-04-26T21:31:36.884712+00:00
   0
 ENDSEC
   0
