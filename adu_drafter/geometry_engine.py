@@ -9,7 +9,7 @@ from shapely.geometry import LineString, Point, Polygon, box
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
 
-from .models import ADUDesignBrief, Point2D, SiteInput
+from .models import ADUDesignBrief, ExistingStructure, Point2D, SiteInput
 
 
 @dataclass(frozen=True)
@@ -32,11 +32,12 @@ def _setback_polygon(site: SiteInput) -> Polygon:
     return box(min_x, min_y, max_x, max_y)
 
 
-def _expanded_existing_house(site: SiteInput) -> Polygon:
-    existing = site.existing_house
-    poly = box(existing.min_x, existing.min_y, existing.max_x, existing.max_y)
-    if site.separation_distance > 0:
-        poly = poly.buffer(site.separation_distance, cap_style=3, join_style=2)
+def _expanded_existing_structure(structure: ExistingStructure) -> Polygon:
+    """Build an exclusion polygon by buffering an existing structure footprint."""
+    poly = box(structure.x_min, structure.y_min, structure.x_max, structure.y_max)
+    if structure.separation_req > 0:
+        # Keep orthogonal CAD-style corners for deterministic rectangular math.
+        poly = poly.buffer(structure.separation_req, cap_style=3, join_style=2)
     return poly
 
 
@@ -47,8 +48,10 @@ def compute_true_buildable_area(site: SiteInput) -> Polygon:
     """
 
     lot_after_setbacks = _setback_polygon(site)
-    exclusion = _expanded_existing_house(site)
-    buildable = lot_after_setbacks.difference(exclusion)
+    buildable = lot_after_setbacks
+    for structure in site.existing_structures:
+        exclusion = _expanded_existing_structure(structure)
+        buildable = buildable.difference(exclusion)
     if buildable.is_empty:
         raise ValueError("Computed buildable area is empty")
     return buildable

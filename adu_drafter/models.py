@@ -46,6 +46,27 @@ class Setbacks(BaseModel):
     right: float = Field(ge=0)
 
 
+class ExistingStructure(BaseModel):
+    """Existing structure footprint with required separation buffer."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1)
+    x_min: float
+    y_min: float
+    x_max: float
+    y_max: float
+    separation_req: float = Field(default=6.0, ge=0.0)
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> "ExistingStructure":
+        if self.x_max <= self.x_min:
+            raise ValueError("x_max must be greater than x_min")
+        if self.y_max <= self.y_min:
+            raise ValueError("y_max must be greater than y_min")
+        return self
+
+
 class SiteInput(BaseModel):
     """Hardcoded site and zoning inputs for deterministic geometry."""
 
@@ -54,8 +75,32 @@ class SiteInput(BaseModel):
     lot_width: float = Field(gt=0)
     lot_depth: float = Field(gt=0)
     setbacks: Setbacks
-    existing_house: BoundingBox2D
-    separation_distance: float = Field(default=0.0, ge=0.0)
+    existing_structures: List[ExistingStructure] = Field(default_factory=list)
+    existing_house: BoundingBox2D | None = None
+    separation_distance: float = Field(default=6.0, ge=0.0)
+
+    @model_validator(mode="after")
+    def normalize_legacy_existing_house(self) -> "SiteInput":
+        """
+        Backward-compatible bridge:
+        - preferred input: existing_structures[]
+        - legacy input: existing_house + separation_distance
+        """
+        if self.existing_structures:
+            return self
+        if self.existing_house is None:
+            raise ValueError("SiteInput requires existing_structures (or legacy existing_house)")
+        self.existing_structures = [
+            ExistingStructure(
+                name="Primary Residence",
+                x_min=self.existing_house.min_x,
+                y_min=self.existing_house.min_y,
+                x_max=self.existing_house.max_x,
+                y_max=self.existing_house.max_y,
+                separation_req=self.separation_distance,
+            )
+        ]
+        return self
 
 
 class WallSegment(BaseModel):

@@ -1,0 +1,89 @@
+{
+  "site_metadata": {
+    "lot_id": "eval-lot-house-garage",
+    "rectangular_lot": true,
+    "lot_width_ft": 60,
+    "lot_depth_ft": 150,
+    "street_frontage": "south",
+    "origin_corner": "SW"
+  },
+  "existing_structures": [
+    {
+      "id": "s1",
+      "label": "Primary Dwelling",
+      "is_primary_dwelling": true,
+      "offset_from_origin_x_ft": 8,
+      "offset_from_origin_y_ft": 20,
+      "width_ft": 44,
+      "depth_ft": 60
+    },
+    {
+      "id": "s2",
+      "label": "Detached Garage",
+      "is_primary_dwelling": false,
+      "offset_from_origin_x_ft": 40,
+      "offset_from_origin_y_ft": 110,
+      "width_ft": 14,
+      "depth_ft": 14
+    }
+  ],
+  "primary_dwelling_walls": [
+    {
+      "wall_label": "PD-REAR",
+      "wall_role": "rear"
+    }
+  ],
+  "candidate_zones": [
+    {
+      "zone_id": "zone-1",
+      "strategy": "rear-left",
+      "zone_polygon_sw_origin": [
+        [
+          4,
+          116
+        ],
+        [
+          24,
+          116
+        ],
+        [
+          24,
+          146
+        ],
+        [
+          4,
+          146
+        ]
+      ],
+      "check_results": {
+        "check_1_rear_setback": true,
+        "check_2_side_setback": true,
+        "check_3_front_constraint": true,
+        "check_4_primary_separation": true,
+        "check_5_other_structure_separation": true
+      },
+      "metrics": {
+        "rear_setback_ft": 4,
+        "side_setback_ft": 4,
+        "clearance_to_primary_ft": 36
+      },
+      "failed_reason_codes": []
+    }
+  ],
+  "program_catalog": [
+    {
+      "program_id": "program-1",
+      "bedrooms": 1,
+      "bathrooms": 1,
+      "target_area_sf": 600,
+      "footprint_width_ft": 20,
+      "footprint_depth_ft": 30
+    }
+  ],
+  "client_request": {
+    "target_size_sf": 600,
+    "bedrooms_preference": 1,
+    "bathrooms_preference": 1,
+    "transit_proximity": false
+  }
+}

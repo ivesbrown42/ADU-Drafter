@@ -30,5 +30,38 @@
     "agent_1_input": "data/eval_cases/case_conflict/agent_1_input.json",
     "agent_1_output": "data/eval_cases/case_conflict/agent_1_output.json",
     "max_attempts": 1
+  },
+  {
+    "case_id": "case-house-in-front",
+    "tier": "tier2-existing-structures",
+    "expected_outcome": "success",
+    "agent_1_input": "data/eval_cases/case_house_in_front/agent_1_input.json",
+    "agent_1_output": "data/eval_cases/case_house_in_front/agent_1_output.json",
+    "agent_2_attempts": [
+      "data/eval_cases/case_house_in_front/agent_2_output.json"
+    ],
+    "max_attempts": 1
+  },
+  {
+    "case_id": "case-house-in-middle",
+    "tier": "tier2-existing-structures",
+    "expected_outcome": "success",
+    "agent_1_input": "data/eval_cases/case_house_in_middle/agent_1_input.json",
+    "agent_1_output": "data/eval_cases/case_house_in_middle/agent_1_output.json",
+    "agent_2_attempts": [
+      "data/eval_cases/case_house_in_middle/agent_2_output.json"
+    ],
+    "max_attempts": 1
+  },
+  {
+    "case_id": "case-house-and-garage",
+    "tier": "tier2-existing-structures",
+    "expected_outcome": "success",
+    "agent_1_input": "data/eval_cases/case_house_and_garage/agent_1_input.json",
+    "agent_1_output": "data/eval_cases/case_house_and_garage/agent_1_output.json",
+    "agent_2_attempts": [
+      "data/eval_cases/case_house_and_garage/agent_2_output.json"
+    ],
+    "max_attempts": 1
   }
 ]
