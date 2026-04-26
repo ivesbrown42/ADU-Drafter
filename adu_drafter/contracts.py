@@ -288,6 +288,8 @@ class RoomIntent(BaseModel):
 
     room_id: str = Field(min_length=1)
     room_type: RoomType
+    label: str = Field(min_length=1)
+    center_local: "LocalPoint"
     target_area_sf: float = Field(gt=0)
     rect: "LocalRect"
     adjacency: list[str] = Field(default_factory=list)
@@ -477,6 +479,7 @@ class ADUElementsDrawing(BaseModel):
     footprint: ADUFootprintDrawing
     separation_zone: SeparationZoneDrawing
     label_lines: list[LabelLine]
+    room_labels: list[LabelLine] = Field(default_factory=list)
     walls_absolute: list[WallAbsoluteDrawing] = Field(default_factory=list)
     openings_absolute: list[OpeningAbsoluteDrawing] = Field(default_factory=list)
 

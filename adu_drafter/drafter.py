@@ -136,6 +136,77 @@ def _draw_line(
     doc.modelspace().add_line(p1, p2, dxfattribs={"layer": layer})
 
 
+def _draw_wall_segment_thick(
+    doc: ezdxf.document.Drawing,
+    *,
+    p1: tuple[float, float],
+    p2: tuple[float, float],
+    thickness_ft: float,
+    layer: str,
+) -> None:
+    _ensure_layer(doc, layer)
+    doc.modelspace().add_lwpolyline(
+        [p1, p2],
+        dxfattribs={"layer": layer, "const_width": thickness_ft},
+    )
+
+
+def _draw_wall_segment_offset_faces(
+    doc: ezdxf.document.Drawing,
+    *,
+    p1: tuple[float, float],
+    p2: tuple[float, float],
+    thickness_ft: float,
+    layer: str,
+) -> None:
+    # Render partition walls as two offset faces (2" each side for 4" total).
+    dx = p2[0] - p1[0]
+    dy = p2[1] - p1[1]
+    seg_len = (dx * dx + dy * dy) ** 0.5
+    if seg_len == 0:
+        return
+    nx = -dy / seg_len
+    ny = dx / seg_len
+    half = thickness_ft / 2.0
+    a1 = (p1[0] + nx * half, p1[1] + ny * half)
+    a2 = (p2[0] + nx * half, p2[1] + ny * half)
+    b1 = (p1[0] - nx * half, p1[1] - ny * half)
+    b2 = (p2[0] - nx * half, p2[1] - ny * half)
+    _draw_line(doc, p1=a1, p2=a2, layer=layer)
+    _draw_line(doc, p1=b1, p2=b2, layer=layer)
+
+
+def _draw_exterior_shell(
+    doc: ezdxf.document.Drawing,
+    *,
+    footprint_points: list[tuple[float, float]],
+    shell_thickness_ft: float = 0.5,  # 6 in
+) -> None:
+    # Draw outer face.
+    _draw_polyline(doc, footprint_points, WALL_EXTR_LAYER)
+    # Draw inner face as an inset rectangle for schematic wall thickness.
+    xs = [point[0] for point in footprint_points[:-1]]
+    ys = [point[1] for point in footprint_points[:-1]]
+    min_x, max_x = min(xs), max(xs)
+    min_y, max_y = min(ys), max(ys)
+    inner_min_x = min_x + shell_thickness_ft
+    inner_max_x = max_x - shell_thickness_ft
+    inner_min_y = min_y + shell_thickness_ft
+    inner_max_y = max_y - shell_thickness_ft
+    if inner_min_x < inner_max_x and inner_min_y < inner_max_y:
+        _draw_polyline(
+            doc,
+            [
+                (inner_min_x, inner_min_y),
+                (inner_max_x, inner_min_y),
+                (inner_max_x, inner_max_y),
+                (inner_min_x, inner_max_y),
+                (inner_min_x, inner_min_y),
+            ],
+            WALL_EXTR_LAYER,
+        )
+
+
 def _draw_site_context(doc: ezdxf.document.Drawing, instructions: DrawingInstructionPayload) -> None:
     _draw_polyline(doc, instructions.lot_boundary.points, SITE_BNDY_LAYER)
     _draw_polyline(doc, instructions.setback_boundary.points, SITE_SETB_LAYER)
@@ -238,22 +309,22 @@ def _draw_floor_plan_detail(
     dx = floorplan_origin_x - source_sw_x
     dy = floorplan_origin_y - source_sw_y
 
-    _draw_polyline(
+    _draw_exterior_shell(
         doc,
-        _translate_points(footprint.points, dx=dx, dy=dy),
-        WALL_EXTR_LAYER,
+        footprint_points=_translate_points(footprint.points, dx=dx, dy=dy),
+        shell_thickness_ft=0.5,
     )
 
     msp = doc.modelspace()
     for wall in instructions.adu_elements.walls_absolute:
-        layer = WALL_EXTR_LAYER if wall.kind == "exterior" else WALL_INTR_LAYER
-        _ensure_layer(doc, layer)
-        msp.add_lwpolyline(
-            [
-                _translate_point(wall.start, dx=dx, dy=dy),
-                _translate_point(wall.end, dx=dx, dy=dy),
-            ],
-            dxfattribs={"layer": layer, "const_width": wall.thickness_ft},
+        if wall.kind == "exterior":
+            continue
+        _draw_wall_segment_offset_faces(
+            doc,
+            p1=_translate_point(wall.start, dx=dx, dy=dy),
+            p2=_translate_point(wall.end, dx=dx, dy=dy),
+            thickness_ft=0.3333,  # 4 in
+            layer=WALL_INTR_LAYER,
         )
 
     for opening in instructions.adu_elements.openings_absolute:
@@ -261,13 +332,13 @@ def _draw_floor_plan_detail(
         _ensure_layer(doc, DOOR_LAYER)
         msp.add_circle(anchor, radius=0.3, dxfattribs={"layer": DOOR_LAYER})
 
-    for label in instructions.adu_elements.label_lines:
+    for room in instructions.adu_elements.room_labels:
         _draw_text(
             doc,
-            text=label.text,
-            anchor=_translate_point(label.anchor, dx=dx, dy=dy),
+            text=room.text,
+            anchor=_translate_point(room.anchor, dx=dx, dy=dy),
             layer=ANNO_TEXT_LAYER,
-            height=label.height,
+            height=room.height,
         )
 
     for dim in instructions.dimensions:
@@ -290,6 +361,7 @@ def _draw_floor_plan_detail(
     translated_footprint = _translate_points(footprint.points, dx=dx, dy=dy)
     min_x = min(point[0] for point in translated_footprint)
     max_x = max(point[0] for point in translated_footprint)
+    min_y = min(point[1] for point in translated_footprint)
     max_y = max(point[1] for point in translated_footprint)
     _draw_text(
         doc,
@@ -298,6 +370,15 @@ def _draw_floor_plan_detail(
         layer=ANNO_TEXT_LAYER,
         height=1.5,
     )
+    if instructions.adu_elements.label_lines:
+        summary_note = " | ".join(label.text for label in instructions.adu_elements.label_lines)
+        _draw_text(
+            doc,
+            text=summary_note,
+            anchor=((min_x + max_x) / 2.0, min_y - 12.0),
+            layer=ANNO_TEXT_LAYER,
+            height=0.8,
+        )
 
 
 def generate_dxf_from_instructions(

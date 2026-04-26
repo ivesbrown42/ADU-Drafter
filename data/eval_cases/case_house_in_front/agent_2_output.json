@@ -21,7 +21,12 @@
       "adjacency": [
         "kitchen-1",
         "bed-1"
-      ]
+      ],
+      "label": "LIVING",
+      "center_local": {
+        "x_ft": 6.0,
+        "y_ft": 7.5
+      }
     },
     {
       "room_id": "kitchen-1",
@@ -36,7 +41,12 @@
       "adjacency": [
         "living-1",
         "bath-1"
-      ]
+      ],
+      "label": "KITCHEN",
+      "center_local": {
+        "x_ft": 16.0,
+        "y_ft": 7.5
+      }
     },
     {
       "room_id": "bed-1",
@@ -51,7 +61,12 @@
       "adjacency": [
         "living-1",
         "bath-1"
-      ]
+      ],
+      "label": "BEDROOM",
+      "center_local": {
+        "x_ft": 8.0,
+        "y_ft": 22.5
+      }
     },
     {
       "room_id": "bath-1",
@@ -66,7 +81,12 @@
       "adjacency": [
         "bed-1",
         "kitchen-1"
-      ]
+      ],
+      "label": "BATH",
+      "center_local": {
+        "x_ft": 18.0,
+        "y_ft": 22.5
+      }
     }
   ],
   "walls_intent": [

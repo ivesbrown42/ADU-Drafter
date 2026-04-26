@@ -493,7 +493,7 @@ $SKPOLY
   9
 $TDCREATE
  40
-2461157.940300926
+2461157.9549305555
   9
 $TDUCREATE
  40
@@ -501,7 +501,7 @@ $TDUCREATE
   9
 $TDUPDATE
  40
-2461157.940300926
+2461157.9549305555
   9
 $TDUUPDATE
  40
@@ -553,7 +553,7 @@ $SPLINESEGS
   9
 $HANDSEED
   5
-71
+74
   9
 $SURFTAB1
  70
@@ -937,7 +937,7 @@ $FINGERPRINTGUID
   9
 $VERSIONGUID
   2
-{EA7251CE-339B-49F4-A718-B5060FB6AF40}
+{19917AA0-A0E9-4085-8698-C4B79AD651FE}
   9
 $EXTNAMES
 290
@@ -3247,21 +3247,31 @@ A-WALL-EXTR
 100
 AcDbPolyline
  90
-2
+5
  70
 0
- 43
+ 10
+100.5
+ 20
 0.5
  10
-100.0
+119.5
  20
-0.0
+0.5
  10
-120.0
+119.5
  20
-0.0
+29.5
+ 10
+100.5
+ 20
+29.5
+ 10
+100.5
+ 20
+0.5
   0
-LWPOLYLINE
+LINE
   5
 60
 330
@@ -3269,25 +3279,23 @@ LWPOLYLINE
 100
 AcDbEntity
   8
-A-WALL-EXTR
+A-WALL-INTR
 100
-AcDbPolyline
- 90
-2
- 70
-0
- 43
-0.5
+AcDbLine
  10
-120.0
+100.0
  20
+15.16665
+ 30
 0.0
- 10
+ 11
 120.0
- 20
-30.0
+ 21
+15.16665
+ 31
+0.0
   0
-LWPOLYLINE
+LINE
   5
 61
 330
@@ -3295,25 +3303,23 @@ LWPOLYLINE
 100
 AcDbEntity
   8
-A-WALL-EXTR
+A-WALL-INTR
 100
-AcDbPolyline
- 90
-2
- 70
-0
- 43
-0.5
- 10
-120.0
- 20
-30.0
+AcDbLine
  10
 100.0
  20
-30.0
+14.83335
+ 30
+0.0
+ 11
+120.0
+ 21
+14.83335
+ 31
+0.0
   0
-LWPOLYLINE
+LINE
   5
 62
 330
@@ -3321,25 +3327,23 @@ LWPOLYLINE
 100
 AcDbEntity
   8
-A-WALL-EXTR
+A-WALL-INTR
 100
-AcDbPolyline
- 90
-2
- 70
-0
- 43
-0.5
+AcDbLine
  10
-100.0
- 20
-30.0
- 10
-100.0
+111.83335
  20
 0.0
+ 30
+0.0
+ 11
+111.83335
+ 21
+15.0
+ 31
+0.0
   0
-LWPOLYLINE
+LINE
   5
 63
 330
@@ -3349,23 +3353,21 @@ AcDbEntity
   8
 A-WALL-INTR
 100
-AcDbPolyline
- 90
-2
- 70
-0
- 43
-0.5
+AcDbLine
  10
-100.0
+112.16665
  20
+0.0
+ 30
+0.0
+ 11
+112.16665
+ 21
 15.0
- 10
-120.0
- 20
-15.0
+ 31
+0.0
   0
-LWPOLYLINE
+LINE
   5
 64
 330
@@ -3375,23 +3377,21 @@ AcDbEntity
   8
 A-WALL-INTR
 100
-AcDbPolyline
- 90
-2
- 70
-0
- 43
-0.5
+AcDbLine
  10
-112.0
- 20
-0.0
- 10
-112.0
+115.83335
  20
 15.0
+ 30
+0.0
+ 11
+115.83335
+ 21
+30.0
+ 31
+0.0
   0
-LWPOLYLINE
+LINE
   5
 65
 330
@@ -3401,21 +3401,19 @@ AcDbEntity
   8
 A-WALL-INTR
 100
-AcDbPolyline
- 90
-2
- 70
-0
- 43
-0.5
+AcDbLine
  10
-116.0
+116.16665
  20
 15.0
- 10
-116.0
- 20
+ 30
+0.0
+ 11
+116.16665
+ 21
 30.0
+ 31
+0.0
   0
 CIRCLE
   5
@@ -3509,21 +3507,21 @@ A-ANNO-TEXT
 100
 AcDbText
  10
-110.0
+106.0
  20
-15.75
+7.5
  30
 0.0
  40
 0.8
   1
-PROPOSED ADU (program-1)
+LIVING
  72
 1
  11
-110.0
+106.0
  21
-15.75
+7.5
  31
 0.0
 100
@@ -3543,21 +3541,89 @@ A-ANNO-TEXT
 100
 AcDbText
  10
-110.0
+116.0
  20
-14.25
+7.5
  30
 0.0
  40
 0.8
   1
-600.0 SF
+KITCHEN
  72
 1
  11
-110.0
+116.0
  21
-14.25
+7.5
+ 31
+0.0
+100
+AcDbText
+ 73
+2
+  0
+TEXT
+  5
+6C
+330
+17
+100
+AcDbEntity
+  8
+A-ANNO-TEXT
+100
+AcDbText
+ 10
+108.0
+ 20
+22.5
+ 30
+0.0
+ 40
+0.8
+  1
+BEDROOM
+ 72
+1
+ 11
+108.0
+ 21
+22.5
+ 31
+0.0
+100
+AcDbText
+ 73
+2
+  0
+TEXT
+  5
+6D
+330
+17
+100
+AcDbEntity
+  8
+A-ANNO-TEXT
+100
+AcDbText
+ 10
+118.0
+ 20
+22.5
+ 30
+0.0
+ 40
+0.8
+  1
+BATH
+ 72
+1
+ 11
+118.0
+ 21
+22.5
  31
 0.0
 100
@@ -3567,7 +3633,7 @@ AcDbText
   0
 LINE
   5
-6C
+6E
 330
 17
 100
@@ -3591,7 +3657,7 @@ AcDbLine
   0
 TEXT
   5
-6D
+6F
 330
 17
 100
@@ -3625,7 +3691,7 @@ AcDbText
   0
 LINE
   5
-6E
+70
 330
 17
 100
@@ -3649,7 +3715,7 @@ AcDbLine
   0
 TEXT
   5
-6F
+71
 330
 17
 100
@@ -3683,7 +3749,7 @@ AcDbText
   0
 TEXT
   5
-70
+72
 330
 17
 100
@@ -3708,6 +3774,40 @@ ADU FLOOR PLAN
 110.0
  21
 40.0
+ 31
+0.0
+100
+AcDbText
+ 73
+2
+  0
+TEXT
+  5
+73
+330
+17
+100
+AcDbEntity
+  8
+A-ANNO-TEXT
+100
+AcDbText
+ 10
+110.0
+ 20
+-12.0
+ 30
+0.0
+ 40
+0.8
+  1
+PROPOSED ADU (program-1) | 600.0 SF
+ 72
+1
+ 11
+110.0
+ 21
+-12.0
  31
 0.0
 100
@@ -4729,7 +4829,7 @@ DictionaryVariables
 280
 0
   1
-1.4.3 @ 2026-04-26T22:34:02.317154+00:00
+1.4.3 @ 2026-04-26T22:55:06.287521+00:00
   0
 ENDSEC
   0

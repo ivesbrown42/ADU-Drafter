@@ -326,6 +326,21 @@ def resolve_drawing_instructions(resolver_input: GeometryResolverInput) -> Drawi
             }
         )
 
+    room_labels: list[dict[str, Any]] = []
+    for room in resolver_input.agent_2_output.rooms:
+        center_x = local_origin_x + room.center_local.x_ft
+        center_y = local_origin_y + room.center_local.y_ft
+        room_labels.append(
+            {
+                "layer": "SITE-ADU-LABEL",
+                "color": 1,
+                "anchor": _pt(center_x, center_y),
+                "text": room.label,
+                "height": 0.8,
+                "alignment": "MIDDLE_CENTER",
+            }
+        )
+
     adu_elements = {
         "footprint": {
             "layer": "SITE-ADU-FOOTPRINT",
@@ -347,6 +362,7 @@ def resolve_drawing_instructions(resolver_input: GeometryResolverInput) -> Drawi
         "label_lines": label_lines,
         "walls_absolute": walls_abs,
         "openings_absolute": openings_abs,
+        "room_labels": room_labels,
     }
 
     payload = DrawingInstructionPayload(

@@ -82,6 +82,8 @@ def valid_agent2_output_payload() -> dict:
             {
                 "room_id": "living-1",
                 "room_type": "living",
+                "label": "LIVING",
+                "center_local": {"x_ft": 6.0, "y_ft": 7.5},
                 "target_area_sf": 180,
                 "rect": {"x_ft": 0, "y_ft": 0, "width_ft": 12, "depth_ft": 15},
                 "adjacency": ["kitchen-1", "bed-1"],
@@ -89,6 +91,8 @@ def valid_agent2_output_payload() -> dict:
             {
                 "room_id": "kitchen-1",
                 "room_type": "kitchen",
+                "label": "KITCHEN",
+                "center_local": {"x_ft": 16.0, "y_ft": 7.5},
                 "target_area_sf": 120,
                 "rect": {"x_ft": 12, "y_ft": 0, "width_ft": 8, "depth_ft": 15},
                 "adjacency": ["living-1", "bath-1"],
@@ -96,6 +100,8 @@ def valid_agent2_output_payload() -> dict:
             {
                 "room_id": "bed-1",
                 "room_type": "bedroom",
+                "label": "BEDROOM",
+                "center_local": {"x_ft": 8.0, "y_ft": 22.5},
                 "target_area_sf": 240,
                 "rect": {"x_ft": 0, "y_ft": 15, "width_ft": 16, "depth_ft": 15},
                 "adjacency": ["living-1", "bath-1"],
@@ -103,6 +109,8 @@ def valid_agent2_output_payload() -> dict:
             {
                 "room_id": "bath-1",
                 "room_type": "bathroom",
+                "label": "BATH",
+                "center_local": {"x_ft": 18.0, "y_ft": 22.5},
                 "target_area_sf": 60,
                 "rect": {"x_ft": 16, "y_ft": 15, "width_ft": 4, "depth_ft": 15},
                 "adjacency": ["bed-1", "kitchen-1"],

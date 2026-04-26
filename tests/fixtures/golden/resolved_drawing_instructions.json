@@ -198,6 +198,52 @@
         "alignment": "MIDDLE_CENTER"
       }
     ],
+    "room_labels": [
+      {
+        "layer": "SITE-ADU-LABEL",
+        "color": 1,
+        "anchor": [
+          10.0,
+          93.5
+        ],
+        "text": "LIVING",
+        "height": 0.8,
+        "alignment": "MIDDLE_CENTER"
+      },
+      {
+        "layer": "SITE-ADU-LABEL",
+        "color": 1,
+        "anchor": [
+          20.0,
+          93.5
+        ],
+        "text": "KITCHEN",
+        "height": 0.8,
+        "alignment": "MIDDLE_CENTER"
+      },
+      {
+        "layer": "SITE-ADU-LABEL",
+        "color": 1,
+        "anchor": [
+          12.0,
+          108.5
+        ],
+        "text": "BEDROOM",
+        "height": 0.8,
+        "alignment": "MIDDLE_CENTER"
+      },
+      {
+        "layer": "SITE-ADU-LABEL",
+        "color": 1,
+        "anchor": [
+          22.0,
+          108.5
+        ],
+        "text": "BATH",
+        "height": 0.8,
+        "alignment": "MIDDLE_CENTER"
+      }
+    ],
     "walls_absolute": [
       {
         "wall_id": "w-ext-bottom",

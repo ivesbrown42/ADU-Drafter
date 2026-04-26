@@ -115,6 +115,35 @@ def _valid_agent1_output() -> dict:
 
 
 def _valid_agent2_output() -> dict:
+    def _room(
+        room_id: str,
+        room_type: str,
+        target_area_sf: float,
+        x_ft: float,
+        y_ft: float,
+        width_ft: float,
+        depth_ft: float,
+        adjacency: list[str],
+        label: str,
+    ) -> dict:
+        return {
+            "room_id": room_id,
+            "room_type": room_type,
+            "target_area_sf": target_area_sf,
+            "rect": {
+                "x_ft": x_ft,
+                "y_ft": y_ft,
+                "width_ft": width_ft,
+                "depth_ft": depth_ft,
+            },
+            "adjacency": adjacency,
+            "label": label,
+            "center_local": {
+                "x_ft": x_ft + (width_ft / 2.0),
+                "y_ft": y_ft + (depth_ft / 2.0),
+            },
+        }
+
     return {
         "agent": "adu-designer-agent-2",
         "version": "1.0",
@@ -125,34 +154,10 @@ def _valid_agent2_output() -> dict:
             "layout_type": "rectangular-1bed-1bath",
         },
         "rooms": [
-            {
-                "room_id": "living-1",
-                "room_type": "living",
-                "target_area_sf": 180.0,
-                "rect": {"x_ft": 0.0, "y_ft": 0.0, "width_ft": 12.0, "depth_ft": 15.0},
-                "adjacency": ["kitchen-1", "bed-1"],
-            },
-            {
-                "room_id": "kitchen-1",
-                "room_type": "kitchen",
-                "target_area_sf": 120.0,
-                "rect": {"x_ft": 12.0, "y_ft": 0.0, "width_ft": 8.0, "depth_ft": 15.0},
-                "adjacency": ["living-1", "bath-1"],
-            },
-            {
-                "room_id": "bed-1",
-                "room_type": "bedroom",
-                "target_area_sf": 240.0,
-                "rect": {"x_ft": 0.0, "y_ft": 15.0, "width_ft": 16.0, "depth_ft": 15.0},
-                "adjacency": ["living-1", "bath-1"],
-            },
-            {
-                "room_id": "bath-1",
-                "room_type": "bathroom",
-                "target_area_sf": 60.0,
-                "rect": {"x_ft": 16.0, "y_ft": 15.0, "width_ft": 4.0, "depth_ft": 15.0},
-                "adjacency": ["bed-1", "kitchen-1"],
-            },
+            _room("living-1", "living", 180.0, 0.0, 0.0, 12.0, 15.0, ["kitchen-1", "bed-1"], "LIVING"),
+            _room("kitchen-1", "kitchen", 120.0, 12.0, 0.0, 8.0, 15.0, ["living-1", "bath-1"], "KITCHEN"),
+            _room("bed-1", "bedroom", 240.0, 0.0, 15.0, 16.0, 15.0, ["living-1", "bath-1"], "BEDROOM"),
+            _room("bath-1", "bathroom", 60.0, 16.0, 15.0, 4.0, 15.0, ["bed-1", "kitchen-1"], "BATH"),
         ],
         "walls_intent": [
             {
