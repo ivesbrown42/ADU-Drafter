@@ -1,0 +1,202 @@
+{
+  "source_paths": {
+    "agent_1_input": "data/eval_cases/case_happy/agent_1_input.json",
+    "resolved_drawing_instructions": "data/eval_reports/latest/cases/tier1-happy/attempt-1/resolved_drawing_instructions.json",
+    "dxf": "generated_adu_latest.dxf"
+  },
+  "site_input_used": {
+    "site_metadata": {
+      "lot_id": "eval-lot-001",
+      "rectangular_lot": true,
+      "lot_width_ft": 50,
+      "lot_depth_ft": 120,
+      "street_frontage": "south",
+      "origin_corner": "SW"
+    },
+    "existing_structures": [
+      {
+        "id": "s1",
+        "label": "Primary Dwelling",
+        "is_primary_dwelling": true,
+        "offset_from_origin_x_ft": 10,
+        "offset_from_origin_y_ft": 20,
+        "width_ft": 30,
+        "depth_ft": 35
+      }
+    ],
+    "candidate_zones": [
+      {
+        "zone_id": "zone-1",
+        "strategy": "rear-left",
+        "zone_polygon_sw_origin": [
+          [
+            4,
+            80
+          ],
+          [
+            24,
+            80
+          ],
+          [
+            24,
+            110
+          ],
+          [
+            4,
+            110
+          ]
+        ],
+        "check_results": {
+          "check_1_rear_setback": true,
+          "check_2_side_setback": true,
+          "check_3_front_constraint": true,
+          "check_4_primary_separation": true,
+          "check_5_other_structure_separation": true
+        },
+        "metrics": {
+          "rear_setback_ft": 4,
+          "side_setback_ft": 4,
+          "clearance_to_primary_ft": 12
+        },
+        "failed_reason_codes": []
+      }
+    ],
+    "program_catalog": [
+      {
+        "program_id": "program-1",
+        "bedrooms": 1,
+        "bathrooms": 1,
+        "target_area_sf": 600,
+        "footprint_width_ft": 20,
+        "footprint_depth_ft": 30
+      }
+    ]
+  },
+  "computed_bounding_boxes": {
+    "lot_boundary_points": [
+      [
+        0.0,
+        0.0
+      ],
+      [
+        50.0,
+        0.0
+      ],
+      [
+        50.0,
+        120.0
+      ],
+      [
+        0.0,
+        120.0
+      ],
+      [
+        0.0,
+        0.0
+      ]
+    ],
+    "setback_boundary_points": [
+      [
+        4.0,
+        4.0
+      ],
+      [
+        46.0,
+        4.0
+      ],
+      [
+        46.0,
+        116.0
+      ],
+      [
+        4.0,
+        116.0
+      ],
+      [
+        4.0,
+        4.0
+      ]
+    ],
+    "existing_structures": [
+      {
+        "label": "Primary Dwelling",
+        "sw_corner": [
+          10.0,
+          20.0
+        ],
+        "ne_corner": [
+          40.0,
+          55.0
+        ]
+      }
+    ],
+    "adu_footprint": {
+      "sw_corner": [
+        4.0,
+        86.0
+      ],
+      "ne_corner": [
+        24.0,
+        116.0
+      ],
+      "points": [
+        [
+          4.0,
+          86.0
+        ],
+        [
+          24.0,
+          86.0
+        ],
+        [
+          24.0,
+          116.0
+        ],
+        [
+          4.0,
+          116.0
+        ],
+        [
+          4.0,
+          86.0
+        ]
+      ]
+    },
+    "adu_separation_zone": {
+      "sw_corner": [
+        -2.0,
+        80.0
+      ],
+      "ne_corner": [
+        30.0,
+        122.0
+      ],
+      "points": [
+        [
+          -2.0,
+          80.0
+        ],
+        [
+          30.0,
+          80.0
+        ],
+        [
+          30.0,
+          122.0
+        ],
+        [
+          -2.0,
+          122.0
+        ],
+        [
+          -2.0,
+          80.0
+        ]
+      ]
+    },
+    "geometry_flags": [
+      "SEPARATION_ZONE_EXTENDS_WEST_OF_LOT",
+      "SEPARATION_ZONE_EXTENDS_NORTH_OF_LOT"
+    ]
+  }
+}
