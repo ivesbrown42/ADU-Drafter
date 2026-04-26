@@ -1,0 +1,17 @@
+{
+  "lot_width": 50.0,
+  "lot_depth": 120.0,
+  "setbacks": {
+    "front": 15.0,
+    "rear": 16.0,
+    "left": 5.0,
+    "right": 5.0
+  },
+  "existing_house": {
+    "min_x": 10.0,
+    "min_y": 20.0,
+    "max_x": 40.0,
+    "max_y": 55.0
+  },
+  "separation_distance": 6.0
+}

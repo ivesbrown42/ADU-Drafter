@@ -1,0 +1,66 @@
+{
+  "target_sqft": 500,
+  "bedrooms": 1,
+  "bathrooms": 1,
+  "walls": [
+    {
+      "start": { "x": 10.0, "y": 70.0 },
+      "end": { "x": 35.0, "y": 70.0 },
+      "thickness": 0.5,
+      "layer": "A-WALL"
+    },
+    {
+      "start": { "x": 35.0, "y": 70.0 },
+      "end": { "x": 35.0, "y": 90.0 },
+      "thickness": 0.5,
+      "layer": "A-WALL"
+    },
+    {
+      "start": { "x": 35.0, "y": 90.0 },
+      "end": { "x": 10.0, "y": 90.0 },
+      "thickness": 0.5,
+      "layer": "A-WALL"
+    },
+    {
+      "start": { "x": 10.0, "y": 90.0 },
+      "end": { "x": 10.0, "y": 70.0 },
+      "thickness": 0.5,
+      "layer": "A-WALL"
+    },
+    {
+      "start": { "x": 22.5, "y": 70.0 },
+      "end": { "x": 22.5, "y": 90.0 },
+      "thickness": 0.35,
+      "layer": "A-WALL-INT"
+    }
+  ],
+  "blocks": [
+    {
+      "block_name": "DOOR_SINGLE_36",
+      "x": 10.0,
+      "y": 80.0,
+      "rotation": 90.0,
+      "layer": "A-DOOR",
+      "xscale": 1.0,
+      "yscale": 1.0
+    },
+    {
+      "block_name": "TOILET_STANDARD",
+      "x": 14.0,
+      "y": 75.0,
+      "rotation": 0.0,
+      "layer": "A-FIXT",
+      "xscale": 1.0,
+      "yscale": 1.0
+    },
+    {
+      "block_name": "KITCHEN_ISLAND_SMALL",
+      "x": 29.0,
+      "y": 80.0,
+      "rotation": 0.0,
+      "layer": "A-FURN",
+      "xscale": 1.0,
+      "yscale": 1.0
+    }
+  ]
+}
