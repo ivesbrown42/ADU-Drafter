@@ -254,7 +254,7 @@ def test_orchestrator_retry_exhausts_on_invalid_agent2(tmp_path: Path):
     _write(a1_in, _valid_agent1_input())
     _write(a1_out, _valid_agent1_output())
     invalid = _valid_agent2_output()
-    invalid["openings_intent"][1]["anchor_local"]["y_ft"] = 14.75  # not on host wall
+    invalid["openings_intent"][1]["anchor_local"]["y_ft"] = 31.0  # outside footprint bounds
     _write(a2_out, invalid)
 
     args = Namespace(
@@ -318,7 +318,7 @@ def test_orchestrator_retry_succeeds_on_second_attempt(tmp_path: Path, monkeypat
     _write(a1_out, _valid_agent1_output())
 
     invalid = _valid_agent2_output()
-    invalid["openings_intent"][1]["anchor_local"]["y_ft"] = 14.75
+    invalid["openings_intent"][1]["anchor_local"]["y_ft"] = 31.0
     _write(a2_out, invalid)
 
     valid = _valid_agent2_output()

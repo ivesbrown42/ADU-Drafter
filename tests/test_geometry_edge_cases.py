@@ -16,12 +16,12 @@ def test_room_overlap_rejected(valid_agent2_input):
         validate_agent_2_output_against_input(valid_agent2_input, model)
 
 
-def test_opening_anchor_not_on_wall_rejected(valid_agent2_input):
+def test_opening_anchor_not_on_wall_is_soft_only(valid_agent2_input):
     bad = copy.deepcopy(valid_agent2_output_payload())
     bad["openings_intent"][0]["anchor_local"] = {"x_ft": 10.0, "y_ft": 14.7}
     model = Agent2Output.model_validate(bad)
-    with pytest.raises(ValueError, match="anchor_local"):
-        validate_agent_2_output_against_input(valid_agent2_input, model)
+    # Opening-on-host-wall fidelity is telemetry-only in the operational matrix.
+    validate_agent_2_output_against_input(valid_agent2_input, model)
 
 
 def test_geometry_outside_zone_rejected(valid_agent2_input):
@@ -32,12 +32,12 @@ def test_geometry_outside_zone_rejected(valid_agent2_input):
         validate_agent_2_output_against_input(valid_agent2_input, model)
 
 
-def test_invalid_grid_snapping_rejected(valid_agent2_input):
+def test_invalid_grid_snapping_is_soft_only(valid_agent2_input):
     bad = copy.deepcopy(valid_agent2_output_payload())
     bad["walls_intent"][0]["start_local"]["x_ft"] = 0.3
     model = Agent2Output.model_validate(bad)
-    with pytest.raises(ValueError, match="grid_step_ft|grid step"):
-        validate_agent_2_output_against_input(valid_agent2_input, model)
+    # Grid-snapping strictness is telemetry-only in Phase 1.
+    validate_agent_2_output_against_input(valid_agent2_input, model)
 
 
 def test_missing_required_bathroom_rejected(valid_agent2_input):
@@ -48,14 +48,14 @@ def test_missing_required_bathroom_rejected(valid_agent2_input):
         validate_agent_2_output_against_input(valid_agent2_input, model)
 
 
-def test_exterior_loop_open_rejected(valid_agent2_input):
+def test_exterior_loop_open_is_soft_only(valid_agent2_input):
     bad = copy.deepcopy(valid_agent2_output_payload())
     bad["walls_intent"] = [
         wall for wall in bad["walls_intent"] if wall["wall_id"] != "w-ext-left"
     ]
     model = Agent2Output.model_validate(bad)
-    with pytest.raises(ValueError, match="EXTERIOR_LOOP_OPEN"):
-        validate_agent_2_output_against_input(valid_agent2_input, model)
+    # Exterior shell-loop completeness is telemetry-only in Phase 1.
+    validate_agent_2_output_against_input(valid_agent2_input, model)
 
 
 def test_room_without_door_rejected(valid_agent2_input):

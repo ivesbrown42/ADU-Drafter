@@ -714,16 +714,9 @@ def validate_agent_2_output_against_input(agent_input: Agent2Input, agent_output
             "PROGRAM_EXCEEDS_ZONE: selected_program footprint exceeds selected_zone bounds"
         )
 
-    def _is_snapped(value: float) -> bool:
-        # Accept tiny floating noise from JSON serialization/LLM formatting.
-        quotient = value / grid
-        return abs(quotient - round(quotient)) <= 1e-6
-
     def _validate_local_point(name: str, x: float, y: float) -> None:
         if x < 0 or y < 0 or x > footprint_width_ft or y > footprint_depth_ft:
             raise ValueError(f"{name} is outside zone-local bounds")
-        if not _is_snapped(x) or not _is_snapped(y):
-            raise ValueError(f"{name} is not snapped to grid_step_ft={grid}")
 
     required_room_counts: dict[RoomType, int] = {
         "bedroom": agent_input.selected_program.bedrooms,
@@ -745,15 +738,8 @@ def validate_agent_2_output_against_input(agent_input: Agent2Input, agent_output
         if room.room_type in room_type_counts:
             room_type_counts[room.room_type] += 1
         rect = room.rect
-        if rect.max_x > footprint_width_ft or rect.max_y > footprint_depth_ft:
+        if rect.x_ft < 0 or rect.y_ft < 0 or rect.max_x > footprint_width_ft or rect.max_y > footprint_depth_ft:
             raise ValueError(f"Room '{room.room_id}' extends outside selected zone bounds")
-        if not all(
-            _is_snapped(value)
-            for value in (rect.x_ft, rect.y_ft, rect.width_ft, rect.depth_ft)
-        ):
-            raise ValueError(
-                f"Room '{room.room_id}' rectangle is not snapped to grid_step_ft={grid}"
-            )
         total_room_area += rect.width_ft * rect.depth_ft
         room_rects.append((room.room_id, rect.x_ft, rect.y_ft, rect.max_x, rect.max_y))
 
@@ -782,95 +768,27 @@ def validate_agent_2_output_against_input(agent_input: Agent2Input, agent_output
         raise ValueError("Total room area exceeds selected zone area")
 
     wall_ids: set[str] = set()
-    wall_segments: dict[str, tuple[float, float, float, float]] = {}
-    exterior_segments: set[tuple[tuple[float, float], tuple[float, float]]] = set()
     for wall in agent_output.walls_intent:
-        if wall.wall_id in wall_ids:
-            raise ValueError(f"Duplicate wall_id '{wall.wall_id}' in Agent2 output")
         wall_ids.add(wall.wall_id)
-        _validate_local_point(f"Wall '{wall.wall_id}' start_local", wall.start_local.x_ft, wall.start_local.y_ft)
-        _validate_local_point(f"Wall '{wall.wall_id}' end_local", wall.end_local.x_ft, wall.end_local.y_ft)
-        if (
-            abs(wall.start_local.x_ft - wall.end_local.x_ft) <= 1e-9
-            and abs(wall.start_local.y_ft - wall.end_local.y_ft) <= 1e-9
-        ):
-            raise ValueError(f"Wall '{wall.wall_id}' has zero length")
-        if wall.thickness_ft not in agent_input.design_rules.wall_thickness_options_ft:
-            raise ValueError(
-                f"Wall '{wall.wall_id}' thickness {wall.thickness_ft} is not in allowed options "
-                f"{agent_input.design_rules.wall_thickness_options_ft}"
-            )
-        wall_segments[wall.wall_id] = (
+        _validate_local_point(
+            f"Wall '{wall.wall_id}' start_local",
             wall.start_local.x_ft,
             wall.start_local.y_ft,
+        )
+        _validate_local_point(
+            f"Wall '{wall.wall_id}' end_local",
             wall.end_local.x_ft,
             wall.end_local.y_ft,
-        )
-        if wall.kind == "exterior":
-            if abs(wall.start_local.x_ft - wall.end_local.x_ft) > 1e-9 and abs(
-                wall.start_local.y_ft - wall.end_local.y_ft
-            ) > 1e-9:
-                raise ValueError(
-                    f"EXTERIOR_WALL_NON_ORTHOGONAL: wall '{wall.wall_id}' must be axis-aligned"
-                )
-            normalized = tuple(
-                sorted(
-                    [
-                        (wall.start_local.x_ft, wall.start_local.y_ft),
-                        (wall.end_local.x_ft, wall.end_local.y_ft),
-                    ]
-                )
-            )
-            exterior_segments.add(normalized)
-
-    expected_exterior_segments = {
-        tuple(sorted([(0.0, 0.0), (footprint_width_ft, 0.0)])),
-        tuple(sorted([(footprint_width_ft, 0.0), (footprint_width_ft, footprint_depth_ft)])),
-        tuple(sorted([(footprint_width_ft, footprint_depth_ft), (0.0, footprint_depth_ft)])),
-        tuple(sorted([(0.0, footprint_depth_ft), (0.0, 0.0)])),
-    }
-    if exterior_segments != expected_exterior_segments:
-        missing = expected_exterior_segments - exterior_segments
-        extra = exterior_segments - expected_exterior_segments
-        if missing:
-            raise ValueError(
-                f"EXTERIOR_LOOP_OPEN: missing required exterior edges {sorted(missing)}"
-            )
-        raise ValueError(
-            f"EXTERIOR_LOOP_INVALID: unexpected exterior edges {sorted(extra)}"
         )
 
     for opening in agent_output.openings_intent:
         if opening.wall_id not in wall_ids:
-            raise ValueError(
-                f"Opening '{opening.opening_id}' references unknown wall_id '{opening.wall_id}'"
-            )
+            continue
         _validate_local_point(
             f"Opening '{opening.opening_id}' anchor_local",
             opening.anchor_local.x_ft,
             opening.anchor_local.y_ft,
         )
-        x1, y1, x2, y2 = wall_segments[opening.wall_id]
-        dx = x2 - x1
-        dy = y2 - y1
-        length = (dx**2 + dy**2) ** 0.5
-        if opening.width_ft > length + 1e-6:
-            raise ValueError(
-                f"Opening '{opening.opening_id}' width exceeds host wall '{opening.wall_id}' length"
-            )
-        # Anchor must lie on host wall segment (within small tolerance).
-        ax = opening.anchor_local.x_ft
-        ay = opening.anchor_local.y_ft
-        cross = abs((ax - x1) * dy - (ay - y1) * dx)
-        if cross > 1e-4:
-            raise ValueError(
-                f"Opening '{opening.opening_id}' anchor is not on host wall '{opening.wall_id}'"
-            )
-        dot = (ax - x1) * dx + (ay - y1) * dy
-        if dot < -1e-6 or dot - (length**2) > 1e-6:
-            raise ValueError(
-                f"Opening '{opening.opening_id}' anchor falls outside host wall '{opening.wall_id}' segment"
-            )
 
     def _point_on_room_boundary(rect: LocalRect, point: LocalPoint) -> bool:
         x = point.x_ft

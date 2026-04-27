@@ -17,6 +17,13 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from adu_drafter.run_pipeline import run_end_to_end
+from adu_drafter.contracts import (
+    load_agent_1_input,
+    load_agent_1_output,
+    load_agent_2_output,
+    build_agent_2_input,
+)
+from adu_drafter.quality_scoring import score_agent_2_layout
 
 
 def _load_json(path: Path) -> Any:
@@ -104,6 +111,32 @@ def _attempt_run(
     else:
         outcome = "failure"
 
+    quality_telemetry: dict[str, Any] | None = None
+    if outcome == "success" and attempt_agent2_path is not None:
+        try:
+            agent_1_input = load_agent_1_input(Path(case["agent_1_input"]))
+            agent_1_output = load_agent_1_output(Path(case["agent_1_output"]))
+            agent_2_input = build_agent_2_input(
+                agent_1_input,
+                agent_1_output,
+                input_coordinates_normalized_to_sw=bool(
+                    case.get("input_coordinates_normalized_to_sw", True)
+                ),
+                grid_step_ft=float(case.get("grid_step_ft", 0.5)),
+                wall_thickness_options_ft=case.get("wall_thickness_options_ft", [0.35, 0.5]),
+                max_retry_iteration=case.get("max_retry_iteration", 3),
+            )
+            agent_2_output = load_agent_2_output(attempt_agent2_path)
+            score = score_agent_2_layout(agent_2_input, agent_2_output)
+            quality_telemetry = score
+        except Exception as exc:  # pylint: disable=broad-except
+            quality_telemetry = {
+                "score": None,
+                "status": "telemetry_error",
+                "deductions": [],
+                "notes": [f"QUALITY_SCORING_ERROR: {exc}"],
+            }
+
     return {
         "attempt_index": attempt_index,
         "agent_2_output": str(attempt_agent2_path) if attempt_agent2_path else None,
@@ -114,6 +147,7 @@ def _attempt_run(
         "conflict_artifact": str(conflict_artifact),
         "output_dxf": str(output_dxf),
         "error_message": error_message,
+        "quality_telemetry": quality_telemetry,
     }
 
 
@@ -224,6 +258,30 @@ def _summary(results: list[dict[str, Any]]) -> dict[str, Any]:
     ]
     avg_retries = mean(retries_for_successes) if retries_for_successes else 0.0
 
+    scored_attempts: list[dict[str, Any]] = []
+    soft_fail_codes: Counter[str] = Counter()
+    for r in results:
+        attempts = r.get("attempts", [])
+        if not attempts:
+            continue
+        telemetry = attempts[-1].get("quality_telemetry")
+        if not isinstance(telemetry, dict):
+            continue
+        if telemetry.get("score") is None:
+            continue
+        scored_attempts.append(telemetry)
+        for deduction in telemetry.get("deductions", []):
+            code = deduction.get("code")
+            if isinstance(code, str):
+                soft_fail_codes[code] += 1
+
+    avg_quality_score = (
+        mean(float(t["score"]) for t in scored_attempts)
+        if scored_attempts
+        else 0.0
+    )
+    scored_case_count = len(scored_attempts)
+
     failure_counts = Counter()
     for r in results:
         failure_counts.update(r["failure_nodes"])
@@ -245,6 +303,11 @@ def _summary(results: list[dict[str, Any]]) -> dict[str, Any]:
         "hard_failure_rate": hard_failures / total,
         "average_retries_per_success": avg_retries,
         "top_failure_nodes": dict(failure_counts.most_common()),
+        "quality_telemetry": {
+            "scored_case_count": scored_case_count,
+            "average_score": avg_quality_score,
+            "top_deduction_codes": dict(soft_fail_codes.most_common()),
+        },
         "tier_breakdown": tiers,
     }
 
@@ -262,10 +325,18 @@ def _write_csv(results: list[dict[str, Any]], output_csv: Path) -> None:
                 "passed",
                 "attempts_used",
                 "first_failure_node",
+                "quality_score",
+                "quality_status",
             ],
         )
         writer.writeheader()
         for r in results:
+            last_attempt = r["attempts"][-1] if r.get("attempts") else None
+            quality = (
+                last_attempt.get("quality_telemetry")
+                if isinstance(last_attempt, dict)
+                else None
+            )
             writer.writerow(
                 {
                     "case_id": r["case_id"],
@@ -275,6 +346,8 @@ def _write_csv(results: list[dict[str, Any]], output_csv: Path) -> None:
                     "passed": r["passed"],
                     "attempts_used": r["attempts_used"],
                     "first_failure_node": r["failure_nodes"][0] if r["failure_nodes"] else "",
+                    "quality_score": quality.get("score", "") if isinstance(quality, dict) else "",
+                    "quality_status": quality.get("status", "") if isinstance(quality, dict) else "",
                 }
             )
 
