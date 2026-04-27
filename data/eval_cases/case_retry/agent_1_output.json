@@ -1,0 +1,42 @@
+{
+  "agent": "site-decision-agent-1",
+  "version": "1.0",
+  "conflict_flag": false,
+  "conflict_reasons": [],
+  "decision_summary": {
+    "selected_strategy": "rear-left",
+    "selected_zone_id": "zone-1",
+    "selected_program_id": "program-1",
+    "primary_dwelling_rear_wall_label": "PD-REAR"
+  },
+  "compliance_trace": [
+    {
+      "zone_id": "zone-1",
+      "strategy": "rear-left",
+      "check_results": {
+        "check_1_rear_setback": true,
+        "check_2_side_setback": true,
+        "check_3_front_constraint": true,
+        "check_4_primary_separation": true,
+        "check_5_other_structure_separation": true
+      },
+      "status": "accepted",
+      "reason_codes": []
+    }
+  ],
+  "for_agent_2": {
+    "zone_id": "zone-1",
+    "program_id": "program-1",
+    "strategy": "rear-left",
+    "constraints_profile_id": "constraints-v1"
+  },
+  "structure_separations": [
+    {
+      "label": "Primary Dwelling",
+      "clearance_ft": 12,
+      "minimum_required_ft": 6,
+      "compliant": true
+    }
+  ],
+  "notes": []
+}

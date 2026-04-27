@@ -1,0 +1,4 @@
+pydantic
+shapely
+ezdxf
+pytest
