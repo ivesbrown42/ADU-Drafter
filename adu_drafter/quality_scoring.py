@@ -130,6 +130,7 @@ def score_agent_2_soft_rules(agent_input: Agent2Input, agent_output: Agent2Outpu
     bathrooms = [r for r in rooms if r.room_type == "bathroom"]
     kitchens = [r for r in rooms if r.room_type == "kitchen"]
     livings = [r for r in rooms if r.room_type == "living"]
+    open_living_kitchens = [r for r in rooms if r.room_type == "open_living_kitchen"]
     plumbing_rooms = [r for r in rooms if r.room_type in {"bathroom", "circulation", "storage"}]
 
     exterior_walls = [w for w in agent_output.walls_intent if w.kind == "exterior"]
@@ -185,7 +186,8 @@ def score_agent_2_soft_rules(agent_input: Agent2Input, agent_output: Agent2Outpu
     axis = "x" if footprint_width >= footprint_depth else "y"
     bed_center = _group_centroid_axis(bedrooms, axis=axis)
     plumbing_center = _group_centroid_axis(plumbing_rooms, axis=axis)
-    living_center = _group_centroid_axis(livings + kitchens, axis=axis)
+    living_zone_rooms = open_living_kitchens if open_living_kitchens else (livings + kitchens)
+    living_center = _group_centroid_axis(living_zone_rooms, axis=axis)
     if (
         bed_center is not None
         and plumbing_center is not None
@@ -257,7 +259,11 @@ def score_agent_2_soft_rules(agent_input: Agent2Input, agent_output: Agent2Outpu
             )
 
     if recommended_open_plan:
-        combined_area = sum(_room_area(r) for r in livings + kitchens)
+        combined_area = (
+            sum(_room_area(r) for r in open_living_kitchens)
+            if open_living_kitchens
+            else sum(_room_area(r) for r in livings + kitchens)
+        )
         if combined_area < 160.0 - EPS:
             add_deduction(
                 "OPEN_LIVING_KITCHEN_MIN_AREA",
@@ -353,7 +359,11 @@ def score_agent_2_soft_rules(agent_input: Agent2Input, agent_output: Agent2Outpu
 
     if recommended_open_plan:
         add_pct_range_deduction(
-            actual_area=sum(_room_area(r) for r in livings + kitchens),
+            actual_area=(
+                sum(_room_area(r) for r in open_living_kitchens)
+                if open_living_kitchens
+                else sum(_room_area(r) for r in livings + kitchens)
+            ),
             min_pct=0.36 if bedroom_count == 1 else 0.32,
             max_pct=0.44 if bedroom_count == 1 else 0.40,
             code="OPEN_LIVING_KITCHEN_AREA_SHARE_OUT_OF_RANGE",
@@ -473,10 +483,10 @@ def score_agent_2_soft_rules(agent_input: Agent2Input, agent_output: Agent2Outpu
                 30,
                 f"Bedroom '{bedroom.room_id}' has fewer than two exterior shell edges.",
             )
-    if livings or kitchens:
+    if living_zone_rooms:
         living_has_exterior = any(
             _room_exterior_edge_count(room.rect, footprint_width, footprint_depth) >= 1
-            for room in (livings + kitchens)
+            for room in living_zone_rooms
         )
         if not living_has_exterior:
             add_deduction(

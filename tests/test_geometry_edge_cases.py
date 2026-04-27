@@ -18,7 +18,7 @@ def test_room_overlap_rejected(valid_agent2_input):
 
 def test_opening_anchor_not_on_wall_is_soft_only(valid_agent2_input):
     bad = copy.deepcopy(valid_agent2_output_payload())
-    bad["openings_intent"][0]["anchor_local"] = {"x_ft": 10.0, "y_ft": 14.7}
+    bad["openings_intent"][0]["anchor_local"] = {"x_ft": 9.5, "y_ft": 10.0}
     model = Agent2Output.model_validate(bad)
     # Opening-on-host-wall fidelity is telemetry-only in the operational matrix.
     validate_agent_2_output_against_input(valid_agent2_input, model)
@@ -32,12 +32,12 @@ def test_geometry_outside_zone_rejected(valid_agent2_input):
         validate_agent_2_output_against_input(valid_agent2_input, model)
 
 
-def test_invalid_grid_snapping_is_soft_only(valid_agent2_input):
+def test_invalid_grid_snapping_rejected(valid_agent2_input):
     bad = copy.deepcopy(valid_agent2_output_payload())
     bad["walls_intent"][0]["start_local"]["x_ft"] = 0.3
     model = Agent2Output.model_validate(bad)
-    # Grid-snapping strictness is telemetry-only in Phase 1.
-    validate_agent_2_output_against_input(valid_agent2_input, model)
+    with pytest.raises(ValueError, match="grid_step_ft|grid step"):
+        validate_agent_2_output_against_input(valid_agent2_input, model)
 
 
 def test_missing_required_bathroom_rejected(valid_agent2_input):
@@ -45,6 +45,56 @@ def test_missing_required_bathroom_rejected(valid_agent2_input):
     bad["rooms"] = [room for room in bad["rooms"] if room["room_type"] != "bathroom"]
     model = Agent2Output.model_validate(bad)
     with pytest.raises(ValueError, match="MISSING_BATHROOM"):
+        validate_agent_2_output_against_input(valid_agent2_input, model)
+
+
+def test_open_plan_required_for_1br_rejected(valid_agent2_input):
+    bad = copy.deepcopy(valid_agent2_output_payload())
+    bad["rooms"] = [
+        {
+            "room_id": "living-1",
+            "room_type": "living",
+            "label": "LIVING",
+            "center_local": {"x_ft": 6.0, "y_ft": 5.0},
+            "target_area_sf": 120,
+            "rect": {"x_ft": 0, "y_ft": 0, "width_ft": 12, "depth_ft": 10},
+            "adjacency": ["kitchen-1", "bath-1"],
+        },
+        {
+            "room_id": "kitchen-1",
+            "room_type": "kitchen",
+            "label": "KITCHEN",
+            "center_local": {"x_ft": 16.0, "y_ft": 5.0},
+            "target_area_sf": 80,
+            "rect": {"x_ft": 12, "y_ft": 0, "width_ft": 8, "depth_ft": 10},
+            "adjacency": ["living-1", "bath-1"],
+        },
+    ] + [room for room in bad["rooms"] if room["room_type"] != "open_living_kitchen"]
+    model = Agent2Output.model_validate(bad)
+    with pytest.raises(ValueError, match="OPEN_PLAN_REQUIRED"):
+        validate_agent_2_output_against_input(valid_agent2_input, model)
+
+
+def test_bathroom_proportion_violation_rejected(valid_agent2_input):
+    bad = copy.deepcopy(valid_agent2_output_payload())
+    bath = next(room for room in bad["rooms"] if room["room_type"] == "bathroom")
+    bath["rect"]["width_ft"] = 4.0
+    bath["center_local"] = {"x_ft": 17.0, "y_ft": 14.5}
+    model = Agent2Output.model_validate(bad)
+    with pytest.raises(ValueError, match="PROPORTION_VIOLATION"):
+        validate_agent_2_output_against_input(valid_agent2_input, model)
+
+
+def test_zone_order_violation_rejected(valid_agent2_input):
+    bad = copy.deepcopy(valid_agent2_output_payload())
+    bath = next(room for room in bad["rooms"] if room["room_type"] == "bathroom")
+    bath["rect"]["x_ft"] = 15.0
+    bath["rect"]["y_ft"] = 21.0
+    bath["rect"]["width_ft"] = 5.0
+    bath["rect"]["depth_ft"] = 9.0
+    bath["center_local"] = {"x_ft": 17.5, "y_ft": 25.5}
+    model = Agent2Output.model_validate(bad)
+    with pytest.raises(ValueError, match="ZONE_ORDER_VIOLATION"):
         validate_agent_2_output_against_input(valid_agent2_input, model)
 
 
@@ -80,40 +130,31 @@ def valid_agent2_output_payload() -> dict:
         },
         "rooms": [
             {
-                "room_id": "living-1",
-                "room_type": "living",
-                "label": "LIVING",
-                "center_local": {"x_ft": 6.0, "y_ft": 7.5},
-                "target_area_sf": 180,
-                "rect": {"x_ft": 0, "y_ft": 0, "width_ft": 12, "depth_ft": 15},
-                "adjacency": ["kitchen-1", "bed-1"],
-            },
-            {
-                "room_id": "kitchen-1",
-                "room_type": "kitchen",
-                "label": "KITCHEN",
-                "center_local": {"x_ft": 16.0, "y_ft": 7.5},
-                "target_area_sf": 120,
-                "rect": {"x_ft": 12, "y_ft": 0, "width_ft": 8, "depth_ft": 15},
-                "adjacency": ["living-1", "bath-1"],
+                "room_id": "open-lk-1",
+                "room_type": "open_living_kitchen",
+                "label": "OPEN LIVING/KITCHEN",
+                "center_local": {"x_ft": 10.0, "y_ft": 5.0},
+                "target_area_sf": 200,
+                "rect": {"x_ft": 0, "y_ft": 0, "width_ft": 20, "depth_ft": 10},
+                "adjacency": ["bath-1", "bed-1"],
             },
             {
                 "room_id": "bed-1",
                 "room_type": "bedroom",
                 "label": "BEDROOM",
-                "center_local": {"x_ft": 8.0, "y_ft": 22.5},
-                "target_area_sf": 240,
-                "rect": {"x_ft": 0, "y_ft": 15, "width_ft": 16, "depth_ft": 15},
-                "adjacency": ["living-1", "bath-1"],
+                "center_local": {"x_ft": 7.5, "y_ft": 24.5},
+                "target_area_sf": 165,
+                "rect": {"x_ft": 0, "y_ft": 19, "width_ft": 15, "depth_ft": 11},
+                "adjacency": ["open-lk-1", "bath-1"],
             },
             {
                 "room_id": "bath-1",
                 "room_type": "bathroom",
                 "label": "BATH",
-                "center_local": {"x_ft": 18.0, "y_ft": 22.5},
-                "target_area_sf": 60,
-                "rect": {"x_ft": 16, "y_ft": 15, "width_ft": 4, "depth_ft": 15},
-                "adjacency": ["bed-1", "kitchen-1"],
+                "center_local": {"x_ft": 17.5, "y_ft": 14.5},
+                "target_area_sf": 45,
+                "rect": {"x_ft": 15, "y_ft": 10, "width_ft": 5, "depth_ft": 9},
+                "adjacency": ["open-lk-1", "bed-1"],
             },
         ],
         "walls_intent": [
@@ -146,24 +187,24 @@ def valid_agent2_output_payload() -> dict:
                 "thickness_ft": 0.5,
             },
             {
-                "wall_id": "w-int-mid",
+                "wall_id": "w-int-open-top",
                 "kind": "interior",
-                "start_local": {"x_ft": 0, "y_ft": 15},
-                "end_local": {"x_ft": 20, "y_ft": 15},
+                "start_local": {"x_ft": 0, "y_ft": 10},
+                "end_local": {"x_ft": 20, "y_ft": 10},
                 "thickness_ft": 0.5,
             },
             {
-                "wall_id": "w-int-kitchen",
+                "wall_id": "w-int-bed-bottom",
                 "kind": "interior",
-                "start_local": {"x_ft": 12, "y_ft": 0},
-                "end_local": {"x_ft": 12, "y_ft": 15},
+                "start_local": {"x_ft": 0, "y_ft": 19},
+                "end_local": {"x_ft": 15, "y_ft": 19},
                 "thickness_ft": 0.5,
             },
             {
-                "wall_id": "w-int-bath",
+                "wall_id": "w-int-bath-left",
                 "kind": "interior",
-                "start_local": {"x_ft": 16, "y_ft": 15},
-                "end_local": {"x_ft": 16, "y_ft": 30},
+                "start_local": {"x_ft": 15, "y_ft": 10},
+                "end_local": {"x_ft": 15, "y_ft": 19},
                 "thickness_ft": 0.5,
             },
         ],
@@ -177,23 +218,16 @@ def valid_agent2_output_payload() -> dict:
             },
             {
                 "opening_id": "door-bed",
-                "wall_id": "w-int-mid",
+                "wall_id": "w-int-bed-bottom",
                 "opening_type": "door",
-                "anchor_local": {"x_ft": 8, "y_ft": 15},
-                "width_ft": 3.0,
-            },
-            {
-                "opening_id": "door-kitchen",
-                "wall_id": "w-int-kitchen",
-                "opening_type": "door",
-                "anchor_local": {"x_ft": 12, "y_ft": 8},
+                "anchor_local": {"x_ft": 7.5, "y_ft": 19},
                 "width_ft": 3.0,
             },
             {
                 "opening_id": "door-bath",
-                "wall_id": "w-int-bath",
+                "wall_id": "w-int-bath-left",
                 "opening_type": "door",
-                "anchor_local": {"x_ft": 16, "y_ft": 22},
+                "anchor_local": {"x_ft": 15, "y_ft": 14.5},
                 "width_ft": 3.0,
             }
         ],
