@@ -164,27 +164,23 @@ Conflict mode:
   "design_rules": {
     "grid_step_ft": 0.5,
     "wall_thickness_options_ft": [0.35, 0.5],
-    "max_retry_iteration": 3,
-    "layout_heuristics": {
-      "open_plan_required": true,
-      "long_axis": "x|y",
-      "required_room_counts": {
-        "bedroom": 1,
-        "bathroom": 1,
-        "open_living_kitchen": 1
-      },
-      "room_minimums": [
-        {
-          "room_type": "bedroom",
-          "label": "Bedroom",
-          "min_width_ft": 10.0,
-          "min_depth_ft": 11.0,
-          "min_area_sf": 114.0
-        }
-      ],
-      "zone_order_rule": "bathroom_between_private_and_social_on_long_axis",
-      "starter_layout_recipe": "three_band_open_living_bath_bedroom",
-      "preflight_checklist": ["...", "..."]
+    "max_retry_iteration": 3
+  },
+  "layout_rules": {
+    "open_plan_required": true,
+    "plumbing_core_required": true,
+    "long_axis": "x|y",
+    "required_room_counts": {
+      "bedroom": 1,
+      "bathroom": 1,
+      "open_living_kitchen": 1
+    },
+    "minimum_room_dimensions": {
+      "bathroom": {
+        "min_width_ft": 5.0,
+        "min_depth_ft": 7.5,
+        "min_area_sf": 37.0
+      }
     }
   }
 }
@@ -251,6 +247,9 @@ Deterministic validation expectations:
 - room rectangles must not overlap
 - every opening anchor must lie on its host wall segment
 - every opening width must be less than or equal to host wall length
+- `layout_rules.open_plan_required=true` forbids separate living/kitchen rooms for 1BR plans
+- `layout_rules.plumbing_core_required=true` requires bathroom between bedroom and living zones along `layout_rules.long_axis`
+- `layout_rules.minimum_room_dimensions` drives hard minimum width/depth/area checks
 
 ---
 

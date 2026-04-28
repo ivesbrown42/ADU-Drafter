@@ -42,23 +42,23 @@ def test_oversized_program_entry_detected(load_fixture_json) -> None:
     assert entry.target_area_sf == 800.0
 
 
-def test_build_agent2_input_includes_1br_layout_heuristics(load_fixture_json) -> None:
+def test_build_agent2_input_includes_1br_layout_rules(load_fixture_json) -> None:
     agent1_input_payload = load_fixture_json("golden", "agent_1_input.json")
     agent1_output_payload = load_fixture_json("golden", "agent_1_output.json")
     agent1_input = Agent1Input.model_validate(agent1_input_payload)
     agent1_output = Agent1Output.model_validate(agent1_output_payload)
 
     agent2_input = build_agent_2_input(agent1_input, agent1_output)
-    heuristics = agent2_input.design_rules.layout_heuristics
+    rules = agent2_input.layout_rules
 
-    assert heuristics.open_plan_required is True
-    assert heuristics.long_axis == "y"
-    assert heuristics.required_room_counts["open_living_kitchen"] == 1
-    assert "For 1BR plans" in " ".join(heuristics.preflight_checklist)
-    assert heuristics.starter_layout_recipe == "three_band_open_living_bath_bedroom"
+    assert rules.open_plan_required is True
+    assert rules.plumbing_core_required is True
+    assert rules.long_axis == "y"
+    assert rules.required_room_counts["open_living_kitchen"] == 1
+    assert rules.minimum_room_dimensions["bathroom"].min_width_ft == 5.0
 
 
-def test_build_agent2_input_includes_2br_layout_heuristics(load_fixture_json) -> None:
+def test_build_agent2_input_includes_2br_layout_rules(load_fixture_json) -> None:
     agent1_input_payload = load_fixture_json("oversized", "agent_1_input.json")
     agent1_output_payload = load_fixture_json("golden", "agent_1_output.json")
     agent1_output_payload = copy.deepcopy(agent1_output_payload)
@@ -68,11 +68,11 @@ def test_build_agent2_input_includes_2br_layout_heuristics(load_fixture_json) ->
     agent1_input = Agent1Input.model_validate(agent1_input_payload)
     agent1_output = Agent1Output.model_validate(agent1_output_payload)
     agent2_input = build_agent_2_input(agent1_input, agent1_output)
-    heuristics = agent2_input.design_rules.layout_heuristics
+    rules = agent2_input.layout_rules
 
-    assert heuristics.open_plan_required is False
-    assert heuristics.long_axis == "y"
-    assert heuristics.required_room_counts["bedroom"] == 2
-    assert "open_living_kitchen" not in heuristics.required_room_counts
-    assert heuristics.starter_layout_recipe == "split_living_kitchen_with_mid_plumbing"
+    assert rules.open_plan_required is False
+    assert rules.plumbing_core_required is True
+    assert rules.long_axis == "y"
+    assert rules.required_room_counts["bedroom"] == 2
+    assert "open_living_kitchen" not in rules.required_room_counts
 

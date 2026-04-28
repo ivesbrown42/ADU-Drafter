@@ -36,30 +36,27 @@ You will receive:
   - wall thickness defaults
   - minimum room/clearance requirements for this PoC
   - grid step or snap preference (if provided)
-  - `layout_heuristics` (deterministic guidance from Python), including:
+  - `layout_rules` (deterministic hard rules from Python), including:
     - `open_plan_required`
+    - `plumbing_core_required`
     - `long_axis`
     - `required_room_counts`
-    - `room_minimums`
-    - `zone_order_rule`
-    - `starter_layout_recipe`
-    - `preflight_checklist`
+    - `minimum_room_dimensions`
 
 Assume the orchestrator already validated Agent 1.
 
-## First-Pass Reliability Protocol (Required)
+## Rule Obedience Protocol (Required)
 
 Before emitting final JSON, you MUST run this sequence:
 
-1. Read `design_rules.layout_heuristics` first.
-2. Start from `starter_layout_recipe` and keep room bands simple/orthogonal.
-3. Satisfy `required_room_counts` exactly (or higher only when still non-overlapping and in-bounds).
-4. Enforce each item in `room_minimums` against your room rectangles.
-5. Enforce `zone_order_rule` along `long_axis`:
-   - Bathroom/plumbing must lie between bedroom zone and living/open-living zone.
-6. Execute every line in `preflight_checklist` before final output.
+1. Read `layout_rules` first.
+2. You must strictly obey the `layout_rules` provided in your input JSON.
+3. If `open_plan_required` is true, do not create separate `living` and `kitchen` rooms; emit one `open_living_kitchen`.
+4. If `plumbing_core_required` is true, ensure bathroom is placed between bedroom and living/open-living along `long_axis`.
+5. Satisfy `required_room_counts` exactly (or higher only if still non-overlapping and in-bounds).
+6. Enforce `minimum_room_dimensions` for each listed room type.
 
-If any preflight item fails and you cannot fix it with a valid layout, return `conflict_flag=true` with empty geometry arrays.
+If any required rule fails and you cannot fix it with a valid layout, return `conflict_flag=true` with empty geometry arrays.
 
 ## What You Must Produce
 

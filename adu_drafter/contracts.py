@@ -253,26 +253,22 @@ class SelectedProgram(BaseModel):
     footprint_depth_ft: float = Field(gt=0)
 
 
-class RoomMinimumGuideline(BaseModel):
+class MinimumRoomDimension(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    room_type: RoomType
-    label: str = Field(min_length=1)
     min_width_ft: float = Field(gt=0)
     min_depth_ft: float = Field(gt=0)
-    min_area_sf: float = Field(gt=0)
+    min_area_sf: float | None = Field(default=None, gt=0)
 
 
-class LayoutHeuristics(BaseModel):
+class LayoutRules(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     open_plan_required: bool = False
+    plumbing_core_required: bool = True
     long_axis: LongAxis = "x"
     required_room_counts: dict[RoomType, int] = Field(default_factory=dict)
-    room_minimums: list[RoomMinimumGuideline] = Field(default_factory=list)
-    zone_order_rule: str = Field(default="bathroom_between_private_and_social_on_long_axis")
-    starter_layout_recipe: str = Field(default="none")
-    preflight_checklist: list[str] = Field(default_factory=list)
+    minimum_room_dimensions: dict[RoomType, MinimumRoomDimension] = Field(default_factory=dict)
 
 
 class DesignRules(BaseModel):
@@ -281,7 +277,6 @@ class DesignRules(BaseModel):
     grid_step_ft: float = Field(gt=0)
     wall_thickness_options_ft: list[float] = Field(min_length=1)
     max_retry_iteration: int = Field(ge=1)
-    layout_heuristics: LayoutHeuristics = Field(default_factory=LayoutHeuristics)
 
 
 class Agent2Input(BaseModel):
@@ -294,6 +289,7 @@ class Agent2Input(BaseModel):
     selected_zone: SelectedZone
     selected_program: SelectedProgram
     design_rules: DesignRules
+    layout_rules: LayoutRules = Field(default_factory=LayoutRules)
 
     @model_validator(mode="after")
     def validate_selection_alignment(self) -> "Agent2Input":
@@ -698,7 +694,7 @@ def build_agent_2_input(
 
     zone = next(zone for zone in agent_input.candidate_zones if zone.zone_id == selected_zone_id)
     program = next(program for program in agent_input.program_catalog if program.program_id == selected_program_id)
-    layout_heuristics = _build_layout_heuristics(program)
+    layout_rules = _build_layout_rules(program)
 
     payload = {
         "agent_1_output": agent_output.model_dump(mode="json"),
@@ -717,13 +713,13 @@ def build_agent_2_input(
             "grid_step_ft": grid_step_ft,
             "wall_thickness_options_ft": wall_thickness_options_ft,
             "max_retry_iteration": max_retry_iteration,
-            "layout_heuristics": layout_heuristics.model_dump(mode="json"),
         },
+        "layout_rules": layout_rules.model_dump(mode="json"),
     }
     return Agent2Input.model_validate(payload)
 
 
-def _build_layout_heuristics(program: ProgramCatalogEntry) -> LayoutHeuristics:
+def _build_layout_rules(program: ProgramCatalogEntry) -> LayoutRules:
     open_plan_required = program.bedrooms == 1
     long_axis: LongAxis = "x" if program.footprint_width_ft >= program.footprint_depth_ft else "y"
     if open_plan_required:
@@ -732,30 +728,23 @@ def _build_layout_heuristics(program: ProgramCatalogEntry) -> LayoutHeuristics:
             "bathroom": program.bathrooms,
             "open_living_kitchen": 1,
         }
-        room_minimums = [
-            RoomMinimumGuideline(
-                room_type="bedroom",
-                label="Bedroom",
+        minimum_room_dimensions: dict[RoomType, MinimumRoomDimension] = {
+            "bedroom": MinimumRoomDimension(
                 min_width_ft=10.0,
                 min_depth_ft=11.0,
                 min_area_sf=114.0,
             ),
-            RoomMinimumGuideline(
-                room_type="bathroom",
-                label="Bathroom",
+            "bathroom": MinimumRoomDimension(
                 min_width_ft=5.0,
                 min_depth_ft=7.5,
                 min_area_sf=37.0,
             ),
-            RoomMinimumGuideline(
-                room_type="open_living_kitchen",
-                label="Open Living/Kitchen",
+            "open_living_kitchen": MinimumRoomDimension(
                 min_width_ft=16.0,
                 min_depth_ft=10.0,
                 min_area_sf=160.0,
             ),
-        ]
-        starter_layout_recipe = "three_band_open_living_bath_bedroom"
+        }
     else:
         required_room_counts = {
             "bedroom": program.bedrooms,
@@ -763,58 +752,34 @@ def _build_layout_heuristics(program: ProgramCatalogEntry) -> LayoutHeuristics:
             "kitchen": 1,
             "living": 1,
         }
-        room_minimums = [
-            RoomMinimumGuideline(
-                room_type="bedroom",
-                label="Bedroom",
+        minimum_room_dimensions = {
+            "bedroom": MinimumRoomDimension(
                 min_width_ft=10.0,
                 min_depth_ft=11.0,
                 min_area_sf=114.0,
             ),
-            RoomMinimumGuideline(
-                room_type="bathroom",
-                label="Bathroom",
+            "bathroom": MinimumRoomDimension(
                 min_width_ft=5.0,
                 min_depth_ft=7.5,
                 min_area_sf=37.0,
             ),
-            RoomMinimumGuideline(
-                room_type="kitchen",
-                label="Kitchen",
+            "kitchen": MinimumRoomDimension(
                 min_width_ft=9.0,
                 min_depth_ft=8.0,
                 min_area_sf=72.0,
             ),
-            RoomMinimumGuideline(
-                room_type="living",
-                label="Living",
+            "living": MinimumRoomDimension(
                 min_width_ft=9.5,
                 min_depth_ft=6.5,
                 min_area_sf=61.0,
             ),
-        ]
-        starter_layout_recipe = "split_living_kitchen_with_mid_plumbing"
-    preflight_checklist = [
-        "Snap all room/wall/opening coordinates to design_rules.grid_step_ft.",
-        "Keep each room rectangle fully inside selected_program footprint.",
-        "Ensure every non-storage room has a door opening on its boundary.",
-        "Run room minimum checks from design_rules.layout_heuristics.room_minimums.",
-    ]
-    if open_plan_required:
-        preflight_checklist.append(
-            "For 1BR plans, emit exactly one open_living_kitchen room and no separate living/kitchen rooms."
-        )
-    preflight_checklist.append(
-        "Place bathroom between bedroom and living/open-living zones on design_rules.layout_heuristics.long_axis."
-    )
-    return LayoutHeuristics(
+        }
+    return LayoutRules(
         open_plan_required=open_plan_required,
+        plumbing_core_required=True,
         long_axis=long_axis,
         required_room_counts=required_room_counts,
-        room_minimums=room_minimums,
-        zone_order_rule="bathroom_between_private_and_social_on_long_axis",
-        starter_layout_recipe=starter_layout_recipe,
-        preflight_checklist=preflight_checklist,
+        minimum_room_dimensions=minimum_room_dimensions,
     )
 
 
@@ -852,10 +817,10 @@ def validate_agent_2_output_against_input(agent_input: Agent2Input, agent_output
         if not _is_snapped(x) or not _is_snapped(y):
             raise ValueError(f"{name} is not snapped to grid_step_ft={grid}")
     
-    heuristics = agent_input.design_rules.layout_heuristics
-    open_plan_required = heuristics.open_plan_required or agent_input.selected_program.bedrooms == 1
-    if heuristics.required_room_counts:
-        required_room_counts = dict(heuristics.required_room_counts)
+    layout_rules = agent_input.layout_rules
+    open_plan_required = layout_rules.open_plan_required or agent_input.selected_program.bedrooms == 1
+    if layout_rules.required_room_counts:
+        required_room_counts = dict(layout_rules.required_room_counts)
     elif open_plan_required:
         required_room_counts: dict[RoomType, int] = {
             "bedroom": agent_input.selected_program.bedrooms,
@@ -899,8 +864,9 @@ def validate_agent_2_output_against_input(agent_input: Agent2Input, agent_output
         room_groups.get("living") or room_groups.get("kitchen")
     ):
         raise ValueError(
-            "OPEN_PLAN_REQUIRED: 1-bedroom plans must provide a single "
-            "'open_living_kitchen' room instead of separate living/kitchen rooms"
+            "Error: OPEN_PLAN_REQUIRED. open_plan_required=true in layout_rules requires "
+            "a single 'open_living_kitchen' room and forbids separate living/kitchen rooms. "
+            "Merge living and kitchen into one open_living_kitchen room."
         )
 
     for room_type, required_count in required_room_counts.items():
@@ -910,7 +876,8 @@ def validate_agent_2_output_against_input(agent_input: Agent2Input, agent_output
         if actual_count < required_count:
             type_code = room_type.upper()
             raise ValueError(
-                f"MISSING_{type_code}: requires >= {required_count} {room_type} room(s), got {actual_count}"
+                f"Error: MISSING_{type_code}. layout_rules.required_room_counts requires >= "
+                f"{required_count} {room_type} room(s), got {actual_count}."
             )
 
     # Room rectangles may touch at boundaries but must not overlap with positive area.
@@ -930,68 +897,63 @@ def validate_agent_2_output_against_input(agent_input: Agent2Input, agent_output
     def _validate_room_minimums(
         room: RoomIntent,
         *,
-        label: str,
+        room_type: RoomType,
         min_width_ft: float,
         min_depth_ft: float,
-        min_area_sf: float,
+        min_area_sf: float | None,
     ) -> None:
         if room.rect.width_ft < min_width_ft - 1e-6:
             raise ValueError(
-                f"PROPORTION_VIOLATION: {label} width must be at least {min_width_ft:.1f}ft "
-                f"(room_id='{room.room_id}', got={room.rect.width_ft:.2f}ft)"
+                "Error: PROPORTION_VIOLATION. "
+                f"layout_rules.minimum_room_dimensions.{room_type}.min_width_ft={min_width_ft:.1f} "
+                f"but room_id='{room.room_id}' width is {room.rect.width_ft:.2f}ft. "
+                "Increase the room width."
             )
         if room.rect.depth_ft < min_depth_ft - 1e-6:
             raise ValueError(
-                f"PROPORTION_VIOLATION: {label} depth must be at least {min_depth_ft:.1f}ft "
-                f"(room_id='{room.room_id}', got={room.rect.depth_ft:.2f}ft)"
+                "Error: PROPORTION_VIOLATION. "
+                f"layout_rules.minimum_room_dimensions.{room_type}.min_depth_ft={min_depth_ft:.1f} "
+                f"but room_id='{room.room_id}' depth is {room.rect.depth_ft:.2f}ft. "
+                "Increase the room depth."
             )
         area_sf = room.rect.width_ft * room.rect.depth_ft
-        if area_sf < min_area_sf - 1e-6:
+        if min_area_sf is not None and area_sf < min_area_sf - 1e-6:
             raise ValueError(
-                f"PROPORTION_VIOLATION: {label} area must be at least {min_area_sf:.1f}sf "
-                f"(room_id='{room.room_id}', got={area_sf:.2f}sf)"
+                "Error: PROPORTION_VIOLATION. "
+                f"layout_rules.minimum_room_dimensions.{room_type}.min_area_sf={min_area_sf:.1f} "
+                f"but room_id='{room.room_id}' area is {area_sf:.2f}sf. "
+                "Increase room area."
             )
 
-    default_minimums: dict[RoomType, RoomMinimumGuideline] = {
-        "bedroom": RoomMinimumGuideline(
-            room_type="bedroom",
-            label="Bedroom",
+    default_minimums: dict[RoomType, MinimumRoomDimension] = {
+        "bedroom": MinimumRoomDimension(
             min_width_ft=10.0,
             min_depth_ft=11.0,
             min_area_sf=114.0,
         ),
-        "bathroom": RoomMinimumGuideline(
-            room_type="bathroom",
-            label="Bathroom",
+        "bathroom": MinimumRoomDimension(
             min_width_ft=5.0,
             min_depth_ft=7.5,
             min_area_sf=37.0,
         ),
-        "kitchen": RoomMinimumGuideline(
-            room_type="kitchen",
-            label="Kitchen",
+        "kitchen": MinimumRoomDimension(
             min_width_ft=9.0,
             min_depth_ft=8.0,
             min_area_sf=72.0,
         ),
-        "living": RoomMinimumGuideline(
-            room_type="living",
-            label="Living",
+        "living": MinimumRoomDimension(
             min_width_ft=9.5,
             min_depth_ft=6.5,
             min_area_sf=61.0,
         ),
-        "open_living_kitchen": RoomMinimumGuideline(
-            room_type="open_living_kitchen",
-            label="Open Living/Kitchen",
+        "open_living_kitchen": MinimumRoomDimension(
             min_width_ft=16.0,
             min_depth_ft=10.0,
             min_area_sf=160.0,
         ),
     }
     guideline_by_type = dict(default_minimums)
-    for guideline in heuristics.room_minimums:
-        guideline_by_type[guideline.room_type] = guideline
+    guideline_by_type.update(layout_rules.minimum_room_dimensions)
 
     for room_type in ("bedroom", "bathroom", "kitchen", "living", "open_living_kitchen"):
         guideline = guideline_by_type.get(room_type)
@@ -1000,17 +962,13 @@ def validate_agent_2_output_against_input(agent_input: Agent2Input, agent_output
         for room in room_groups.get(room_type, []):
             _validate_room_minimums(
                 room,
-                label=guideline.label,
+                room_type=room_type,
                 min_width_ft=guideline.min_width_ft,
                 min_depth_ft=guideline.min_depth_ft,
                 min_area_sf=guideline.min_area_sf,
             )
 
-    axis: LongAxis
-    if heuristics.required_room_counts or heuristics.room_minimums:
-        axis = heuristics.long_axis
-    else:
-        axis = "x" if footprint_width_ft >= footprint_depth_ft else "y"
+    axis: LongAxis = layout_rules.long_axis
 
     def _axis_center(rooms: Sequence[RoomIntent]) -> float | None:
         if not rooms:
@@ -1032,7 +990,8 @@ def validate_agent_2_output_against_input(agent_input: Agent2Input, agent_output
             + (room_groups.get("kitchen", []) or [])
         )
     if (
-        bedroom_center is not None
+        layout_rules.plumbing_core_required
+        and bedroom_center is not None
         and bathroom_center is not None
         and living_center is not None
         and not (
@@ -1041,8 +1000,9 @@ def validate_agent_2_output_against_input(agent_input: Agent2Input, agent_output
         )
     ):
         raise ValueError(
-            "ZONE_ORDER_VIOLATION: bathroom zone must lie between bedroom and "
-            "living/open-living zones along the long axis"
+            "Error: PLUMBING_CORE_VIOLATION. The bathroom is not located between the bedroom "
+            "and living space as required by your layout_rules. Move the bathroom to the center "
+            "of the plan along the long axis."
         )
 
     wall_ids: set[str] = set()

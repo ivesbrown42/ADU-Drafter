@@ -32,16 +32,14 @@ These are enforced in `validate_agent_2_output_against_input(...)` and continue 
 3. Basic connectivity
    - Every non-storage room must have at least one door opening on its boundary.
 
-4. Layout heuristics contract to Agent 2 (first-pass quality aid)
-   - `build_agent_2_input(...)` emits deterministic `design_rules.layout_heuristics`:
+4. Layout rules contract to Agent 2 (first-pass quality aid)
+   - `build_agent_2_input(...)` emits deterministic `layout_rules`:
      - `open_plan_required`
+     - `plumbing_core_required`
      - `long_axis`
      - `required_room_counts`
-     - `room_minimums`
-     - `zone_order_rule`
-     - `starter_layout_recipe`
-     - `preflight_checklist`
-   - This guidance is advisory for Agent 2 generation but deterministic in shape.
+     - `minimum_room_dimensions`
+   - These rules are hard requirements for Agent 2 generation and validator retry messaging.
 
 ### SOFT rules (telemetry-only, no retries/failures)
 
