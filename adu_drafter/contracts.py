@@ -1006,10 +1006,12 @@ def validate_agent_2_output_against_input(agent_input: Agent2Input, agent_output
         )
 
     wall_ids: set[str] = set()
+    wall_kind_by_id: dict[str, WallKind] = {}
     for wall in agent_output.walls_intent:
         if wall.wall_id in wall_ids:
             raise ValueError(f"Duplicate wall_id '{wall.wall_id}' in Agent2 output")
         wall_ids.add(wall.wall_id)
+        wall_kind_by_id[wall.wall_id] = wall.kind
         _validate_local_point(
             f"Wall '{wall.wall_id}' start_local",
             wall.start_local.x_ft,
@@ -1046,6 +1048,13 @@ def validate_agent_2_output_against_input(agent_input: Agent2Input, agent_output
         on_top = abs(y - rect.max_y) <= 1e-6 and rect.x_ft - 1e-6 <= x <= rect.max_x + 1e-6
         return on_left or on_right or on_bottom or on_top
 
+    def _opening_touches_room_types(opening: OpeningIntent) -> set[RoomType]:
+        touched: set[RoomType] = set()
+        for room in agent_output.rooms:
+            if _point_on_room_boundary(room.rect, opening.anchor_local):
+                touched.add(room.room_type)
+        return touched
+
     door_openings = [opening for opening in agent_output.openings_intent if opening.opening_type == "door"]
     for room in agent_output.rooms:
         if room.room_type == "storage":
@@ -1053,6 +1062,40 @@ def validate_agent_2_output_against_input(agent_input: Agent2Input, agent_output
         if not any(_point_on_room_boundary(room.rect, door.anchor_local) for door in door_openings):
             raise ValueError(
                 f"ROOM_DISCONNECTED: room '{room.room_id}' has no door opening on its boundary"
+            )
+
+    exterior_doors = [door for door in door_openings if wall_kind_by_id.get(door.wall_id) == "exterior"]
+    if not exterior_doors:
+        raise ValueError(
+            "Error: ENTRY_VIOLATION. No exterior entry door found. Add a primary exterior door "
+            "opening into a public room (living, kitchen, or open_living_kitchen)."
+        )
+    primary_entry = exterior_doors[0]
+    entry_touched_types = _opening_touches_room_types(primary_entry)
+    if {"bedroom", "bathroom"} & entry_touched_types:
+        raise ValueError(
+            "Error: ENTRY_VIOLATION. Exterior door opens directly into a private room "
+            "(bedroom/bathroom). Move the entry to living, kitchen, or open_living_kitchen."
+        )
+    if "circulation" in entry_touched_types:
+        raise ValueError(
+            "Error: ENTRY_VIOLATION. Exterior door opens into circulation/hallway. "
+            "Move the entry to living, kitchen, or open_living_kitchen."
+        )
+    if not ({"living", "kitchen", "open_living_kitchen"} & entry_touched_types):
+        raise ValueError(
+            "Error: ENTRY_VIOLATION. Exterior door must open into a public room "
+            "(living, kitchen, or open_living_kitchen)."
+        )
+
+    for door in door_openings:
+        touched_types = _opening_touches_room_types(door)
+        if "bathroom" in touched_types and (
+            "kitchen" in touched_types or "open_living_kitchen" in touched_types
+        ):
+            raise ValueError(
+                "Error: CIRCULATION_VIOLATION. Bathroom door opens directly into kitchen/open "
+                "living-kitchen. Relocate the bathroom door to living or circulation space."
             )
 
 
