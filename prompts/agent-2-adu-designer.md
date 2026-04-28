@@ -36,8 +36,30 @@ You will receive:
   - wall thickness defaults
   - minimum room/clearance requirements for this PoC
   - grid step or snap preference (if provided)
+  - `layout_heuristics` (deterministic guidance from Python), including:
+    - `open_plan_required`
+    - `long_axis`
+    - `required_room_counts`
+    - `room_minimums`
+    - `zone_order_rule`
+    - `starter_layout_recipe`
+    - `preflight_checklist`
 
 Assume the orchestrator already validated Agent 1.
+
+## First-Pass Reliability Protocol (Required)
+
+Before emitting final JSON, you MUST run this sequence:
+
+1. Read `design_rules.layout_heuristics` first.
+2. Start from `starter_layout_recipe` and keep room bands simple/orthogonal.
+3. Satisfy `required_room_counts` exactly (or higher only when still non-overlapping and in-bounds).
+4. Enforce each item in `room_minimums` against your room rectangles.
+5. Enforce `zone_order_rule` along `long_axis`:
+   - Bathroom/plumbing must lie between bedroom zone and living/open-living zone.
+6. Execute every line in `preflight_checklist` before final output.
+
+If any preflight item fails and you cannot fix it with a valid layout, return `conflict_flag=true` with empty geometry arrays.
 
 ## What You Must Produce
 
@@ -102,6 +124,16 @@ Your output will be rejected unless all of the following pass:
 3. Every opening anchor (`anchor_local`) is fully inside selected zone bounds.
 4. All local coordinates align to the provided grid step.
 5. Room rectangles do not overlap each other.
+6. For 1BR programs, a single `open_living_kitchen` room is required (no separate living + kitchen).
+7. Room dimensions must satisfy minimum width/depth/area thresholds per room type.
+8. Bathroom/plumbing zone must be between bedroom and living/open-living zones along the long axis.
+
+Common hard-fail error codes you should proactively avoid:
+
+- `OPEN_PLAN_REQUIRED`
+- `PROPORTION_VIOLATION`
+- `ZONE_ORDER_VIOLATION`
+- `ROOM_DISCONNECTED`
 
 If you cannot satisfy these constraints, return `conflict_flag=true` and empty `rooms/walls_intent/openings_intent`.
 

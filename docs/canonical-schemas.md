@@ -164,7 +164,28 @@ Conflict mode:
   "design_rules": {
     "grid_step_ft": 0.5,
     "wall_thickness_options_ft": [0.35, 0.5],
-    "max_retry_iteration": 3
+    "max_retry_iteration": 3,
+    "layout_heuristics": {
+      "open_plan_required": true,
+      "long_axis": "x|y",
+      "required_room_counts": {
+        "bedroom": 1,
+        "bathroom": 1,
+        "open_living_kitchen": 1
+      },
+      "room_minimums": [
+        {
+          "room_type": "bedroom",
+          "label": "Bedroom",
+          "min_width_ft": 10.0,
+          "min_depth_ft": 11.0,
+          "min_area_sf": 114.0
+        }
+      ],
+      "zone_order_rule": "bathroom_between_private_and_social_on_long_axis",
+      "starter_layout_recipe": "three_band_open_living_bath_bedroom",
+      "preflight_checklist": ["...", "..."]
+    }
   }
 }
 ```
@@ -191,7 +212,7 @@ To avoid Python-side packing/optimization, Agent 2 must emit explicit zone-local
   "rooms": [
     {
       "room_id": "string",
-      "room_type": "bedroom|bathroom|kitchen|living|circulation|storage",
+      "room_type": "bedroom|bathroom|kitchen|living|open_living_kitchen|circulation|storage",
       "target_area_sf": 0.0,
       "rect": {
         "x_ft": 0.0,

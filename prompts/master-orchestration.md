@@ -53,6 +53,7 @@ Inputs:
 - Build-zone geometry and hard constraints
 - Grid definition and snapping rules
 - Program requirements
+- Deterministic `design_rules.layout_heuristics` from Python contract builder
 
 Outputs:
 - ADU interior design intent JSON (`agent_2_design_brief`)
@@ -95,6 +96,7 @@ LLMs propose intent; Python accepts/rejects and drafts.
 
 4. **Run Agent 2**
    - Generate ADU design intent constrained by Agent 1 decision
+   - Use `design_rules.layout_heuristics` as required preflight guidance before final JSON emission
 
 5. **Validate Agent 2 Output**
    - Pydantic schema check

@@ -26,14 +26,22 @@ These are enforced in `validate_agent_2_output_against_input(...)` and continue 
    - Required room counts for:
      - `bedroom` (from selected program)
      - `bathroom` (from selected program)
-     - `kitchen` (>= 1)
-     - `living` (>= 1)
+     - `open_living_kitchen` (>= 1) for 1BR plans
+     - `kitchen` (>= 1) and `living` (>= 1) for non-1BR plans
 
 3. Basic connectivity
    - Every non-storage room must have at least one door opening on its boundary.
 
-4. Exterior shell consistency
-   - Exterior wall intents must form the required closed orthogonal loop.
+4. Layout heuristics contract to Agent 2 (first-pass quality aid)
+   - `build_agent_2_input(...)` emits deterministic `design_rules.layout_heuristics`:
+     - `open_plan_required`
+     - `long_axis`
+     - `required_room_counts`
+     - `room_minimums`
+     - `zone_order_rule`
+     - `starter_layout_recipe`
+     - `preflight_checklist`
+   - This guidance is advisory for Agent 2 generation but deterministic in shape.
 
 ### SOFT rules (telemetry-only, no retries/failures)
 

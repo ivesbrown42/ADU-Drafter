@@ -118,6 +118,28 @@ def test_room_without_door_rejected(valid_agent2_input):
         validate_agent_2_output_against_input(valid_agent2_input, model)
 
 
+def test_layout_heuristics_override_room_minimums(valid_agent2_input):
+    bad = copy.deepcopy(valid_agent2_output_payload())
+    bath = next(room for room in bad["rooms"] if room["room_type"] == "bathroom")
+    bath["rect"]["width_ft"] = 4.5
+    bath["center_local"] = {"x_ft": 17.25, "y_ft": 14.5}
+    model = Agent2Output.model_validate(bad)
+    with pytest.raises(ValueError, match="PROPORTION_VIOLATION"):
+        validate_agent_2_output_against_input(valid_agent2_input, model)
+
+    # Agent2Input can override minimums via deterministic layout heuristics.
+    valid_agent2_input.design_rules.layout_heuristics.room_minimums = [
+        {
+            "room_type": "bathroom",
+            "label": "Bathroom",
+            "min_width_ft": 4.0,
+            "min_depth_ft": 7.5,
+            "min_area_sf": 36.0,
+        }
+    ]
+    validate_agent_2_output_against_input(valid_agent2_input, model)
+
+
 def valid_agent2_output_payload() -> dict:
     return {
         "agent": "adu-designer-agent-2",
