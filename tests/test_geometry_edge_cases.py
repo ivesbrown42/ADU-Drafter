@@ -4,7 +4,11 @@ import copy
 
 import pytest
 
-from adu_drafter.contracts import Agent2Output, validate_agent_2_output_against_input
+from adu_drafter.contracts import (
+    Agent2Output,
+    RoomMinimumGuideline,
+    validate_agent_2_output_against_input,
+)
 
 
 def test_room_overlap_rejected(valid_agent2_input):
@@ -129,13 +133,13 @@ def test_layout_heuristics_override_room_minimums(valid_agent2_input):
 
     # Agent2Input can override minimums via deterministic layout heuristics.
     valid_agent2_input.design_rules.layout_heuristics.room_minimums = [
-        {
-            "room_type": "bathroom",
-            "label": "Bathroom",
-            "min_width_ft": 4.0,
-            "min_depth_ft": 7.5,
-            "min_area_sf": 36.0,
-        }
+        RoomMinimumGuideline(
+            room_type="bathroom",
+            label="Bathroom",
+            min_width_ft=4.0,
+            min_depth_ft=7.5,
+            min_area_sf=36.0,
+        )
     ]
     validate_agent_2_output_against_input(valid_agent2_input, model)
 
