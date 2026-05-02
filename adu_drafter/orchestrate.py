@@ -20,6 +20,7 @@ from .contracts import (
     validate_agent_1_output_against_input,
     validate_agent_2_output_against_input,
 )
+from .quality_scoring import score_agent_2_layout
 
 
 def _write_json(path: Path, payload: dict) -> None:
@@ -79,6 +80,7 @@ def _load_agent2_with_retries(
     *,
     retries: int,
     retry_poll_seconds: float,
+    candidate_label: str = "Agent 2 output",
 ):
     """
     Reload Agent 2 output from disk on each attempt and validate against Agent2Input.
@@ -95,15 +97,72 @@ def _load_agent2_with_retries(
             if attempt == retries:
                 break
             print(
-                f"[retry] Agent 2 output validation failed (attempt {attempt}/{retries}): {exc}. "
+                f"[retry] {candidate_label} validation failed (attempt {attempt}/{retries}): {exc}. "
                 "Waiting for corrected artifact and retrying..."
             )
             if retry_poll_seconds > 0:
                 time.sleep(retry_poll_seconds)
     assert last_error is not None
     raise ValueError(
-        f"Agent 2 output validation failed after {retries} attempts: {last_error}"
+        f"{candidate_label} validation failed after {retries} attempts: {last_error}"
     ) from last_error
+
+
+def _select_best_agent2_candidate(
+    candidate_paths: list[Path],
+    agent_2_input,
+    *,
+    best_of_n: int,
+    retries: int,
+    retry_poll_seconds: float,
+):
+    if best_of_n < 1:
+        raise ValueError("--best-of-n must be >= 1")
+    if not candidate_paths:
+        raise ValueError("Best-of-N selection requires at least one Agent 2 candidate path")
+
+    selection_count = min(best_of_n, len(candidate_paths))
+    best_candidate = None
+    best_path: Path | None = None
+    best_score: float | None = None
+    failures: list[str] = []
+
+    for idx, candidate_path in enumerate(candidate_paths[:selection_count], start=1):
+        label = f"Agent 2 candidate {idx}/{selection_count} ({candidate_path})"
+        try:
+            candidate = _load_agent2_with_retries(
+                candidate_path,
+                agent_2_input,
+                retries=retries,
+                retry_poll_seconds=retry_poll_seconds,
+                candidate_label=label,
+            )
+            quality = score_agent_2_layout(agent_2_input, candidate)
+            score = float(quality.get("score", 0.0))
+            print(
+                f"[best-of-n] Candidate {idx}/{selection_count} valid with quality score={score:.2f}: "
+                f"{candidate_path}"
+            )
+            if best_candidate is None or best_score is None or score > best_score:
+                best_candidate = candidate
+                best_path = candidate_path
+                best_score = score
+        except ValueError as exc:
+            failures.append(f"{candidate_path}: {exc}")
+            print(f"[best-of-n] Candidate {idx}/{selection_count} rejected: {candidate_path} ({exc})")
+
+    if best_candidate is None:
+        raise ValueError(
+            "All Agent 2 candidates failed hard validation in Best-of-N selection: "
+            + "; ".join(failures)
+        )
+
+    assert best_path is not None
+    assert best_score is not None
+    print(
+        f"[best-of-n] Selected candidate {best_path} with highest quality score={best_score:.2f}."
+    )
+    return best_candidate
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -127,9 +186,25 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help=(
-            "Path to canonical agent_2_output.json payload. "
-            "Required unless Agent 1 returns conflict_flag=true."
+            "Path to canonical single-candidate agent_2_output.json payload. "
+            "Required unless --agent-2-candidate-outputs is provided or Agent 1 returns conflict_flag=true."
         ),
+    )
+    parser.add_argument(
+        "--agent-2-candidate-outputs",
+        nargs="+",
+        type=Path,
+        default=None,
+        help=(
+            "Optional list of candidate agent_2_output.json payloads for Best-of-N selection. "
+            "Each candidate must pass hard validation; highest soft-quality score is selected."
+        ),
+    )
+    parser.add_argument(
+        "--best-of-n",
+        type=int,
+        default=1,
+        help="Maximum number of Agent 2 candidates to score/select from (uses first N paths).",
     )
     parser.add_argument(
         "--resolver-output",
@@ -188,10 +263,16 @@ def run_orchestration(args: argparse.Namespace) -> int:
 
     if not hasattr(args, "retry_poll_seconds"):
         args.retry_poll_seconds = 0.0
+    if not hasattr(args, "agent_2_candidate_outputs"):
+        args.agent_2_candidate_outputs = None
+    if not hasattr(args, "best_of_n"):
+        args.best_of_n = 1
     if args.schema_retries < 1:
         raise ValueError("--schema-retries must be >= 1")
     if args.retry_poll_seconds < 0:
         raise ValueError("--retry-poll-seconds must be >= 0")
+    if args.best_of_n < 1:
+        raise ValueError("--best-of-n must be >= 1")
 
     agent_1_input = _load_with_retries(
         load_agent_1_input,
@@ -239,8 +320,14 @@ def run_orchestration(args: argparse.Namespace) -> int:
         print(f"[3] Conflict geometry resolver payload written to {args.resolver_output}")
         return 0
 
-    if args.agent_2_output is None:
-        raise ValueError("--agent-2-output is required when Agent 1 is non-conflict")
+    candidate_paths: list[Path] = list(args.agent_2_candidate_outputs or [])
+    if args.agent_2_output is not None and candidate_paths:
+        candidate_paths = [args.agent_2_output, *candidate_paths]
+    if not candidate_paths and args.agent_2_output is None:
+        raise ValueError(
+            "--agent-2-output is required when Agent 1 is non-conflict unless "
+            "--agent-2-candidate-outputs is provided"
+        )
 
     agent_2_input = build_agent_2_input(
         agent_1_input,
@@ -252,13 +339,24 @@ def run_orchestration(args: argparse.Namespace) -> int:
     )
     print("[2] Agent 2 input built from validated Agent 1 artifacts.")
 
-    agent_2_output = _load_agent2_with_retries(
-        args.agent_2_output,
-        agent_2_input,
-        retries=args.schema_retries,
-        retry_poll_seconds=args.retry_poll_seconds,
-    )
-    print("[3] Agent 2 output validated against Agent 2 input.")
+    if candidate_paths:
+        agent_2_output = _select_best_agent2_candidate(
+            candidate_paths,
+            agent_2_input,
+            best_of_n=args.best_of_n,
+            retries=args.schema_retries,
+            retry_poll_seconds=args.retry_poll_seconds,
+        )
+        print("[3] Agent 2 Best-of-N selection completed.")
+    else:
+        agent_2_output = _load_agent2_with_retries(
+            args.agent_2_output,
+            agent_2_input,
+            retries=args.schema_retries,
+            retry_poll_seconds=args.retry_poll_seconds,
+            candidate_label=f"Agent 2 output ({args.agent_2_output})",
+        )
+        print("[3] Agent 2 output validated against Agent 2 input.")
 
     resolver_input = build_geometry_resolver_input(
         agent_2_input,

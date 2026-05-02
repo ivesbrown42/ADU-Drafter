@@ -19,6 +19,23 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--agent-1-output", type=Path, required=True)
     parser.add_argument("--agent-2-output", type=Path, default=None)
     parser.add_argument(
+        "--agent-2-candidate-outputs",
+        nargs="+",
+        type=Path,
+        default=None,
+        help=(
+            "Optional list of Agent 2 candidate outputs for Best-of-N selection. "
+            "When provided, orchestrator validates all candidates and selects the "
+            "highest soft-quality score among valid layouts."
+        ),
+    )
+    parser.add_argument(
+        "--best-of-n",
+        type=int,
+        default=1,
+        help="Max number of candidate Agent 2 outputs to consider.",
+    )
+    parser.add_argument(
         "--resolver-input-output",
         type=Path,
         default=Path("data/geometry_resolver_input.json"),
@@ -96,6 +113,8 @@ def run(args: argparse.Namespace) -> int:
         agent_1_input=args.agent_1_input,
         agent_1_output=args.agent_1_output,
         agent_2_output=args.agent_2_output,
+        agent_2_candidate_outputs=args.agent_2_candidate_outputs,
+        best_of_n=args.best_of_n,
         resolver_output=args.resolver_input_output,
         conflict_output=args.conflict_output,
         schema_retries=args.schema_retries,

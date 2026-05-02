@@ -116,7 +116,8 @@ Before final output:
 
 ---
 
-## 5. Best-of-N Note (Target Architecture)
+## 5. Best-of-N Selection (Now Supported)
 
-- **Current:** first valid success is accepted; soft score is telemetry.
-- **Target:** generate multiple valid candidates and pick highest soft score (Best-of-N) without weakening hard-rule validity gates.
+- **Current default:** first valid success is accepted when only one Agent 2 output is provided.
+- **Current optional mode:** orchestrator supports Best-of-N candidate selection (`--agent-2-candidate-outputs` + `--best-of-n`) and picks the highest soft score among hard-valid candidates.
+- **Invariant:** hard-rule validity gates remain strict and are never relaxed by soft scoring.

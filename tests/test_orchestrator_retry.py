@@ -356,3 +356,97 @@ def test_orchestrator_retry_succeeds_on_second_attempt(tmp_path: Path, monkeypat
     assert code == 0
     assert calls["count"] >= 1
     assert resolver_out.exists()
+
+
+def test_orchestrator_best_of_n_selects_highest_scoring_valid_candidate(
+    tmp_path: Path, monkeypatch
+):
+    a1_in = tmp_path / "agent_1_input.json"
+    a1_out = tmp_path / "agent_1_output.json"
+    a2_candidate_1 = tmp_path / "agent_2_output_candidate_1.json"
+    a2_candidate_2 = tmp_path / "agent_2_output_candidate_2.json"
+    resolver_out = tmp_path / "geometry_resolver_input.json"
+    conflict_out = tmp_path / "conflict.json"
+
+    _write(a1_in, _valid_agent1_input())
+    _write(a1_out, _valid_agent1_output())
+
+    candidate_1 = _valid_agent2_output()
+    candidate_1["design_summary"]["layout_type"] = "candidate-one"
+    candidate_2 = _valid_agent2_output()
+    candidate_2["design_summary"]["layout_type"] = "candidate-two"
+    _write(a2_candidate_1, candidate_1)
+    _write(a2_candidate_2, candidate_2)
+
+    import adu_drafter.orchestrate as orch
+
+    def fake_score(_agent_2_input, candidate):
+        layout_type = candidate.design_summary.layout_type
+        if layout_type == "candidate-one":
+            return {"score": 70}
+        return {"score": 95}
+
+    monkeypatch.setattr(orch, "score_agent_2_layout", fake_score)
+
+    args = Namespace(
+        agent_1_input=a1_in,
+        agent_1_output=a1_out,
+        agent_2_output=None,
+        agent_2_candidate_outputs=[a2_candidate_1, a2_candidate_2],
+        best_of_n=2,
+        resolver_output=resolver_out,
+        conflict_output=conflict_out,
+        retry_poll_seconds=0.0,
+        grid_step_ft=0.5,
+        wall_thickness_options_ft=[0.35, 0.5],
+        max_retry_iteration=3,
+        schema_retries=2,
+        input_coordinates_normalized_to_sw=True,
+    )
+
+    code = run_orchestration(args)
+    assert code == 0
+    resolver_payload = json.loads(resolver_out.read_text(encoding="utf-8"))
+    assert resolver_payload["agent_2_output"]["design_summary"]["layout_type"] == "candidate-two"
+
+
+def test_orchestrator_best_of_n_skips_invalid_candidates_and_selects_valid(
+    tmp_path: Path,
+):
+    a1_in = tmp_path / "agent_1_input.json"
+    a1_out = tmp_path / "agent_1_output.json"
+    a2_candidate_bad = tmp_path / "agent_2_output_candidate_bad.json"
+    a2_candidate_good = tmp_path / "agent_2_output_candidate_good.json"
+    resolver_out = tmp_path / "geometry_resolver_input.json"
+    conflict_out = tmp_path / "conflict.json"
+
+    _write(a1_in, _valid_agent1_input())
+    _write(a1_out, _valid_agent1_output())
+
+    invalid = _valid_agent2_output()
+    invalid["openings_intent"][1]["anchor_local"]["y_ft"] = 31.0
+    valid = _valid_agent2_output()
+    valid["design_summary"]["layout_type"] = "valid-candidate"
+    _write(a2_candidate_bad, invalid)
+    _write(a2_candidate_good, valid)
+
+    args = Namespace(
+        agent_1_input=a1_in,
+        agent_1_output=a1_out,
+        agent_2_output=None,
+        agent_2_candidate_outputs=[a2_candidate_bad, a2_candidate_good],
+        best_of_n=2,
+        resolver_output=resolver_out,
+        conflict_output=conflict_out,
+        retry_poll_seconds=0.0,
+        grid_step_ft=0.5,
+        wall_thickness_options_ft=[0.35, 0.5],
+        max_retry_iteration=3,
+        schema_retries=1,
+        input_coordinates_normalized_to_sw=True,
+    )
+
+    code = run_orchestration(args)
+    assert code == 0
+    resolver_payload = json.loads(resolver_out.read_text(encoding="utf-8"))
+    assert resolver_payload["agent_2_output"]["design_summary"]["layout_type"] == "valid-candidate"

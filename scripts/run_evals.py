@@ -18,6 +18,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from adu_drafter.run_pipeline import run_end_to_end
 from adu_drafter.contracts import (
+    Agent2Output,
     load_agent_1_input,
     load_agent_1_output,
     load_agent_2_output,
@@ -76,6 +77,15 @@ def _attempt_run(
         agent_1_input=Path(case["agent_1_input"]),
         agent_1_output=Path(case["agent_1_output"]),
         agent_2_output=attempt_agent2_path,
+        agent_2_candidate_outputs=[
+            Path(p)
+            for p in _ensure_list(
+                case.get("agent_2_candidate_outputs", []), "agent_2_candidate_outputs"
+            )
+        ]
+        if case.get("agent_2_candidate_outputs") is not None
+        else None,
+        best_of_n=int(case.get("best_of_n", 1)),
         resolver_input_output=resolver_input,
         resolved_instructions_output=resolved_instructions,
         conflict_output=conflict_artifact,
@@ -112,7 +122,7 @@ def _attempt_run(
         outcome = "failure"
 
     quality_telemetry: dict[str, Any] | None = None
-    if outcome == "success" and attempt_agent2_path is not None:
+    if outcome == "success":
         try:
             agent_1_input = load_agent_1_input(Path(case["agent_1_input"]))
             agent_1_output = load_agent_1_output(Path(case["agent_1_output"]))
@@ -126,7 +136,16 @@ def _attempt_run(
                 wall_thickness_options_ft=case.get("wall_thickness_options_ft", [0.35, 0.5]),
                 max_retry_iteration=case.get("max_retry_iteration", 3),
             )
-            agent_2_output = load_agent_2_output(attempt_agent2_path)
+            if attempt_agent2_path is not None:
+                agent_2_output = load_agent_2_output(attempt_agent2_path)
+            else:
+                resolver_payload = _load_json(resolver_input)
+                selected_payload = resolver_payload.get("agent_2_output")
+                if not isinstance(selected_payload, dict):
+                    raise ValueError(
+                        "geometry_resolver_input.json missing selected 'agent_2_output' payload"
+                    )
+                agent_2_output = Agent2Output.model_validate(selected_payload)
             score = score_agent_2_layout(agent_2_input, agent_2_output)
             quality_telemetry = score
         except Exception as exc:  # pylint: disable=broad-except
