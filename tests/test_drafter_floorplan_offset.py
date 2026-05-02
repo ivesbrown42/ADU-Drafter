@@ -141,3 +141,4 @@ def test_generated_dxf_explicitly_sets_units_to_feet(tmp_path) -> None:
 
     doc = ezdxf.readfile(out)
     assert doc.units == 2
+    assert doc.header.get("$MEASUREMENT") == 0

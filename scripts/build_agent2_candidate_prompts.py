@@ -47,16 +47,6 @@ def _cardinal_walls(footprint_width_ft: float, footprint_depth_ft: float) -> dic
     }
 
 
-def _living_anchor_room_type(agent_2_input: Agent2Input) -> str:
-    required = agent_2_input.layout_rules.required_room_counts
-    if (
-        agent_2_input.layout_rules.open_plan_required
-        or required.get("open_living_kitchen", 0) > 0
-    ):
-        return "open_living_kitchen"
-    return "living"
-
-
 def _coerce_agent2_input(agent_2_input: Agent2Input | dict[str, Any]) -> Agent2Input:
     if isinstance(agent_2_input, Agent2Input):
         return agent_2_input
@@ -93,8 +83,9 @@ def build_anchor_variations(agent_2_input: Agent2Input | dict[str, Any]) -> list
     model = _coerce_agent2_input(agent_2_input)
     footprint_width_ft = model.selected_program.footprint_width_ft
     footprint_depth_ft = model.selected_program.footprint_depth_ft
+    east_half_min_x_ft = round(footprint_width_ft / 2.0, 4)
     south_half_depth_ft = round(footprint_depth_ft / 2.0, 4)
-    living_room_type = _living_anchor_room_type(model)
+    north_half_min_y_ft = south_half_depth_ft
 
     return [
         AnchorVariation(
@@ -108,24 +99,49 @@ def build_anchor_variations(agent_2_input: Agent2Input | dict[str, Any]) -> list
             anchor_constraints=[{"room_type": "bedroom", "must_touch_wall": "south"}],
         ),
         AnchorVariation(
-            directive_id="anchor_east_bedroom",
-            directive_text="CRITICAL: The bedroom MUST touch the EAST exterior wall.",
-            anchor_constraints=[{"room_type": "bedroom", "must_touch_wall": "east"}],
-        ),
-        AnchorVariation(
-            directive_id="anchor_west_bedroom",
-            directive_text="CRITICAL: The bedroom MUST touch the WEST exterior wall.",
-            anchor_constraints=[{"room_type": "bedroom", "must_touch_wall": "west"}],
-        ),
-        AnchorVariation(
-            directive_id="anchor_southern_half_living",
+            directive_id="anchor_east_open_living_kitchen",
             directive_text=(
-                f"CRITICAL: The {living_room_type} MUST occupy the entire SOUTHERN half "
+                "CRITICAL: The open_living_kitchen MUST occupy the full EAST side "
                 "of the footprint."
             ),
             anchor_constraints=[
                 {
-                    "room_type": living_room_type,
+                    "room_type": "open_living_kitchen",
+                    "must_occupy_region_local_ft": {
+                        "x_min_ft": east_half_min_x_ft,
+                        "x_max_ft": footprint_width_ft,
+                        "y_min_ft": 0.0,
+                        "y_max_ft": footprint_depth_ft,
+                    },
+                }
+            ],
+        ),
+        AnchorVariation(
+            directive_id="anchor_nw_bathroom",
+            directive_text="CRITICAL: The bathroom MUST be anchored to the NW corner.",
+            anchor_constraints=[
+                {
+                    "room_type": "bathroom",
+                    "must_touch_wall": "north",
+                    "must_touch_wall_secondary": "west",
+                    "must_occupy_region_local_ft": {
+                        "x_min_ft": 0.0,
+                        "x_max_ft": east_half_min_x_ft,
+                        "y_min_ft": north_half_min_y_ft,
+                        "y_max_ft": footprint_depth_ft,
+                    },
+                }
+            ],
+        ),
+        AnchorVariation(
+            directive_id="anchor_southern_half_living",
+            directive_text=(
+                "CRITICAL: The open_living_kitchen MUST occupy the entire SOUTHERN half "
+                "of the footprint."
+            ),
+            anchor_constraints=[
+                {
+                    "room_type": "open_living_kitchen",
                     "must_occupy_region_local_ft": {
                         "x_min_ft": 0.0,
                         "x_max_ft": footprint_width_ft,

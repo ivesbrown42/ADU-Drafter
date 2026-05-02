@@ -29,6 +29,8 @@ def test_build_anchor_variations_has_five_distinct_directives() -> None:
     assert len(directives) == 5
     assert len({directive.directive_id for directive in directives}) == 5
     assert directives[0].directive_id == "anchor_north_bedroom"
+    assert directives[2].directive_id == "anchor_east_open_living_kitchen"
+    assert directives[3].directive_id == "anchor_nw_bathroom"
     assert directives[4].directive_id == "anchor_southern_half_living"
 
 
@@ -47,6 +49,14 @@ def test_build_candidate_prompt_payloads_embeds_variation_directives() -> None:
     fifth = payloads[4]
     assert fifth["candidate_id"] == "candidate_5"
     assert "SOUTHERN half" in fifth["semantic_jitter"]["directive_text"]
+    assert (
+        payloads[2]["semantic_jitter"]["directive_id"]
+        == "anchor_east_open_living_kitchen"
+    )
+    assert (
+        payloads[3]["semantic_jitter"]["directive_id"]
+        == "anchor_nw_bathroom"
+    )
 
 
 def test_write_candidate_prompt_payloads_outputs_expected_files(tmp_path: Path) -> None:
@@ -58,4 +68,7 @@ def test_write_candidate_prompt_payloads_outputs_expected_files(tmp_path: Path) 
     assert len(files) == 5
     loaded = json.loads(files[2].read_text(encoding="utf-8"))
     assert loaded["candidate_id"] == "candidate_3"
-    assert loaded["semantic_jitter"]["directive_id"] == "anchor_east_bedroom"
+    assert (
+        loaded["semantic_jitter"]["directive_id"]
+        == "anchor_east_open_living_kitchen"
+    )

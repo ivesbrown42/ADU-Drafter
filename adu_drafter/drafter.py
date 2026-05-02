@@ -33,6 +33,8 @@ OPENING_CUT_OVERTRIM_FT = 0.02
 def _set_document_units_feet(doc: ezdxf.document.Drawing) -> None:
     # Force insertion units to feet to avoid downstream CAD auto-scaling.
     doc.header["$INSUNITS"] = 2
+    # Explicitly mark Imperial measurement to reduce viewer-side ambiguity.
+    doc.header["$MEASUREMENT"] = 0
 
 
 def _draw_walls(doc: ezdxf.document.Drawing, brief: ADUDesignBrief) -> None:
