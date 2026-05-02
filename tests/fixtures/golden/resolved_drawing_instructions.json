@@ -1,0 +1,478 @@
+{
+  "agent": "python-geometry-resolver",
+  "version": "1.0",
+  "coordinate_system": "SW-origin-feet",
+  "units": "feet",
+  "conflict_flag": false,
+  "lot_boundary": {
+    "layer": "SITE-BOUNDARY",
+    "linetype": "CONTINUOUS",
+    "color": 7,
+    "points": [
+      [
+        0.0,
+        0.0
+      ],
+      [
+        50.0,
+        0.0
+      ],
+      [
+        50.0,
+        120.0
+      ],
+      [
+        0.0,
+        120.0
+      ],
+      [
+        0.0,
+        0.0
+      ]
+    ]
+  },
+  "setback_boundary": {
+    "layer": "SITE-SETBACK-BOUNDARY",
+    "linetype": "DASHED",
+    "color": 3,
+    "points": [
+      [
+        4.0,
+        4.0
+      ],
+      [
+        46.0,
+        4.0
+      ],
+      [
+        46.0,
+        116.0
+      ],
+      [
+        4.0,
+        116.0
+      ],
+      [
+        4.0,
+        4.0
+      ]
+    ]
+  },
+  "existing_structures": [
+    {
+      "label": "Primary Dwelling",
+      "layer": "SITE-EXISTING-STRUCTURES",
+      "linetype": "CONTINUOUS",
+      "color": 2,
+      "sw_corner": [
+        10.0,
+        20.0
+      ],
+      "ne_corner": [
+        40.0,
+        55.0
+      ],
+      "points": [
+        [
+          10.0,
+          20.0
+        ],
+        [
+          40.0,
+          20.0
+        ],
+        [
+          40.0,
+          55.0
+        ],
+        [
+          10.0,
+          55.0
+        ],
+        [
+          10.0,
+          20.0
+        ]
+      ],
+      "label_anchor": [
+        25.0,
+        37.5
+      ],
+      "label_text": "PRIMARY DWELLING",
+      "label_height": 1.5
+    }
+  ],
+  "adu_elements": {
+    "footprint": {
+      "layer": "SITE-ADU-FOOTPRINT",
+      "linetype": "CONTINUOUS",
+      "color": 1,
+      "sw_corner": [
+        4.0,
+        86.0
+      ],
+      "ne_corner": [
+        24.0,
+        116.0
+      ],
+      "points": [
+        [
+          4.0,
+          86.0
+        ],
+        [
+          24.0,
+          86.0
+        ],
+        [
+          24.0,
+          116.0
+        ],
+        [
+          4.0,
+          116.0
+        ],
+        [
+          4.0,
+          86.0
+        ]
+      ],
+      "side_placement": "left"
+    },
+    "separation_zone": {
+      "layer": "SITE-ADU-SEPARATION-ZONE",
+      "linetype": "DASHED",
+      "color": 4,
+      "sw_corner": [
+        -2.0,
+        80.0
+      ],
+      "ne_corner": [
+        30.0,
+        122.0
+      ],
+      "points": [
+        [
+          -2.0,
+          80.0
+        ],
+        [
+          30.0,
+          80.0
+        ],
+        [
+          30.0,
+          122.0
+        ],
+        [
+          -2.0,
+          122.0
+        ],
+        [
+          -2.0,
+          80.0
+        ]
+      ]
+    },
+    "label_lines": [
+      {
+        "layer": "SITE-ADU-LABEL",
+        "color": 1,
+        "anchor": [
+          14.0,
+          101.75
+        ],
+        "text": "PROPOSED ADU (program-1)",
+        "height": 0.8,
+        "alignment": "MIDDLE_CENTER"
+      },
+      {
+        "layer": "SITE-ADU-LABEL",
+        "color": 1,
+        "anchor": [
+          14.0,
+          100.25
+        ],
+        "text": "600.0 SF",
+        "height": 0.8,
+        "alignment": "MIDDLE_CENTER"
+      }
+    ],
+    "room_labels": [
+      {
+        "layer": "SITE-ADU-LABEL",
+        "color": 1,
+        "anchor": [
+          14.0,
+          91.0
+        ],
+        "text": "OPEN LIVING/KITCHEN",
+        "height": 0.8,
+        "alignment": "MIDDLE_CENTER"
+      },
+      {
+        "layer": "SITE-ADU-LABEL",
+        "color": 1,
+        "anchor": [
+          11.5,
+          110.5
+        ],
+        "text": "BEDROOM",
+        "height": 0.8,
+        "alignment": "MIDDLE_CENTER"
+      },
+      {
+        "layer": "SITE-ADU-LABEL",
+        "color": 1,
+        "anchor": [
+          21.5,
+          100.5
+        ],
+        "text": "BATH",
+        "height": 0.8,
+        "alignment": "MIDDLE_CENTER"
+      }
+    ],
+    "walls_absolute": [
+      {
+        "wall_id": "w-ext-bottom",
+        "kind": "exterior",
+        "start": [
+          4.0,
+          86.0
+        ],
+        "end": [
+          24.0,
+          86.0
+        ],
+        "thickness_ft": 0.5,
+        "layer": "SITE-ADU-FOOTPRINT"
+      },
+      {
+        "wall_id": "w-ext-right",
+        "kind": "exterior",
+        "start": [
+          24.0,
+          86.0
+        ],
+        "end": [
+          24.0,
+          116.0
+        ],
+        "thickness_ft": 0.5,
+        "layer": "SITE-ADU-FOOTPRINT"
+      },
+      {
+        "wall_id": "w-ext-top",
+        "kind": "exterior",
+        "start": [
+          24.0,
+          116.0
+        ],
+        "end": [
+          4.0,
+          116.0
+        ],
+        "thickness_ft": 0.5,
+        "layer": "SITE-ADU-FOOTPRINT"
+      },
+      {
+        "wall_id": "w-ext-left",
+        "kind": "exterior",
+        "start": [
+          4.0,
+          116.0
+        ],
+        "end": [
+          4.0,
+          86.0
+        ],
+        "thickness_ft": 0.5,
+        "layer": "SITE-ADU-FOOTPRINT"
+      },
+      {
+        "wall_id": "w-int-open-top",
+        "kind": "interior",
+        "start": [
+          4.0,
+          96.0
+        ],
+        "end": [
+          24.0,
+          96.0
+        ],
+        "thickness_ft": 0.5,
+        "layer": "SITE-ADU-INTERIOR"
+      },
+      {
+        "wall_id": "w-int-bed-bottom",
+        "kind": "interior",
+        "start": [
+          4.0,
+          105.0
+        ],
+        "end": [
+          19.0,
+          105.0
+        ],
+        "thickness_ft": 0.5,
+        "layer": "SITE-ADU-INTERIOR"
+      },
+      {
+        "wall_id": "w-int-bath-left",
+        "kind": "interior",
+        "start": [
+          19.0,
+          96.0
+        ],
+        "end": [
+          19.0,
+          105.0
+        ],
+        "thickness_ft": 0.5,
+        "layer": "SITE-ADU-INTERIOR"
+      }
+    ],
+    "openings_absolute": [
+      {
+        "opening_id": "door-main",
+        "opening_type": "door",
+        "wall_id": "w-ext-bottom",
+        "anchor": [
+          12.0,
+          86.0
+        ],
+        "width_ft": 3.0
+      },
+      {
+        "opening_id": "door-bed",
+        "opening_type": "door",
+        "wall_id": "w-int-bed-bottom",
+        "anchor": [
+          11.5,
+          105.0
+        ],
+        "width_ft": 3.0
+      },
+      {
+        "opening_id": "door-bath",
+        "opening_type": "door",
+        "wall_id": "w-int-bath-left",
+        "anchor": [
+          19.0,
+          100.5
+        ],
+        "width_ft": 3.0
+      }
+    ]
+  },
+  "conflict_notice": null,
+  "dimensions": [
+    {
+      "id": "LOT_WIDTH",
+      "layer": "SITE-DIMENSIONS",
+      "color": 6,
+      "p1": [
+        0.0,
+        0.0
+      ],
+      "p2": [
+        50.0,
+        0.0
+      ],
+      "dimline_position": [
+        25.0,
+        -8.0
+      ],
+      "text": "50.0'"
+    },
+    {
+      "id": "LOT_DEPTH",
+      "layer": "SITE-DIMENSIONS",
+      "color": 6,
+      "p1": [
+        0.0,
+        0.0
+      ],
+      "p2": [
+        0.0,
+        120.0
+      ],
+      "dimline_position": [
+        -8.0,
+        60.0
+      ],
+      "text": "120.0'"
+    },
+    {
+      "id": "ADU_WIDTH",
+      "layer": "SITE-DIMENSIONS",
+      "color": 6,
+      "p1": [
+        4.0,
+        86.0
+      ],
+      "p2": [
+        24.0,
+        86.0
+      ],
+      "dimline_position": [
+        14.0,
+        82.0
+      ],
+      "text": "20.0'"
+    },
+    {
+      "id": "ADU_DEPTH",
+      "layer": "SITE-DIMENSIONS",
+      "color": 6,
+      "p1": [
+        24.0,
+        86.0
+      ],
+      "p2": [
+        24.0,
+        116.0
+      ],
+      "dimline_position": [
+        28.0,
+        101.0
+      ],
+      "text": "30.0'"
+    }
+  ],
+  "street_label": {
+    "layer": "SITE-DIMENSIONS",
+    "color": 6,
+    "anchor": [
+      25.0,
+      -4.0
+    ],
+    "text": "STREET",
+    "height": 2.0,
+    "alignment": "MIDDLE_CENTER"
+  },
+  "separation_compliance_markers": [
+    {
+      "label": "Primary Dwelling",
+      "layer": "SITE-ADU-SEPARATION-ZONE",
+      "compliant": true,
+      "circle_center": [
+        25.0,
+        16.0
+      ],
+      "circle_radius": 1.5,
+      "circle_color": 3,
+      "text_anchor": [
+        25.0,
+        13.0
+      ],
+      "text": "SEP: 6.0ft OK",
+      "text_height": 0.8
+    }
+  ],
+  "geometry_flags": [
+    "SEPARATION_ZONE_EXTENDS_WEST_OF_LOT",
+    "SEPARATION_ZONE_EXTENDS_NORTH_OF_LOT"
+  ]
+}
