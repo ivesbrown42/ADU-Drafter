@@ -5,9 +5,14 @@
     "expected_outcome": "success",
     "agent_1_input": "data/eval_cases/case_happy/agent_1_input.json",
     "agent_1_output": "data/eval_cases/case_happy/agent_1_output.json",
-    "agent_2_attempts": [
-      "data/eval_cases/case_happy/agent_2_output.json"
+    "agent_2_candidate_outputs": [
+      "data/eval_cases/case_happy/agent_2_output.json",
+      "data/eval_cases/case_happy/agent_2_output_candidate_better.json",
+      "data/eval_cases/case_happy/agent_2_output.json",
+      "data/eval_cases/case_happy/agent_2_output_candidate_better.json",
+      "data/eval_cases/case_happy/agent_2_output_candidate_better.json"
     ],
+    "best_of_n": 5,
     "max_attempts": 1
   },
   {

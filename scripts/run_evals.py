@@ -86,6 +86,8 @@ def _attempt_run(
         if case.get("agent_2_candidate_outputs") is not None
         else None,
         best_of_n=int(case.get("best_of_n", 1)),
+        duplicate_candidate_penalty=int(case.get("duplicate_candidate_penalty", 15)),
+        reject_duplicate_candidates=bool(case.get("reject_duplicate_candidates", False)),
         resolver_input_output=resolver_input,
         resolved_instructions_output=resolved_instructions,
         conflict_output=conflict_artifact,
