@@ -7,12 +7,76 @@ can measure layout quality without affecting retry/failure behavior.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from statistics import mean
-from typing import Any
+from typing import Any, Callable
 
 from .contracts import Agent2Input, Agent2Output, LocalPoint, LocalRect, OpeningIntent, RoomIntent
 
 EPS = 1e-6
+
+
+@dataclass(frozen=True)
+class SoftScoringRule:
+    """Registry entry for a single soft-scoring rule."""
+
+    code: str
+    description: str
+    apply: Callable[["SoftScoringContext", "SoftScoringAccumulator"], None]
+
+
+@dataclass
+class SoftScoringAccumulator:
+    """Mutable scoring accumulator shared across soft rules."""
+
+    deductions: list[dict[str, Any]] = field(default_factory=list)
+
+    def add_deduction(self, code: str, penalty: int, description: str) -> None:
+        self.deductions.append(
+            {"code": code, "penalty": penalty, "description": description}
+        )
+
+
+@dataclass
+class SoftScoringContext:
+    """Precomputed context shared by soft-scoring rules."""
+
+    agent_input: Agent2Input
+    agent_output: Agent2Output
+    footprint_width: float
+    footprint_depth: float
+    footprint_area: float
+    bedroom_count: int
+    rooms: list[RoomIntent]
+    bedrooms: list[RoomIntent]
+    bathrooms: list[RoomIntent]
+    kitchens: list[RoomIntent]
+    livings: list[RoomIntent]
+    open_living_kitchens: list[RoomIntent]
+    plumbing_rooms: list[RoomIntent]
+    exterior_walls: list[Any]
+    interior_walls: list[Any]
+    doors: list[OpeningIntent]
+    total_room_area: float
+    room_utilization: float
+    unassigned_pct: float
+    aspect_ratio: float
+    recommended_open_plan: bool
+
+    @property
+    def living_zone_rooms(self) -> list[RoomIntent]:
+        return (
+            self.open_living_kitchens
+            if self.open_living_kitchens
+            else (self.livings + self.kitchens)
+        )
+
+    @property
+    def long_axis(self) -> str:
+        return "x" if self.footprint_width >= self.footprint_depth else "y"
+
+    def opening_touches_room_types(self, opening: OpeningIntent) -> set[str]:
+        return _opening_touches_room_types(opening, self.rooms)
 
 
 def _room_area(room: RoomIntent) -> float:
@@ -109,17 +173,9 @@ def _shared_boundary_partition_exists(
     return False
 
 
-def score_agent_2_soft_rules(agent_input: Agent2Input, agent_output: Agent2Output) -> dict[str, Any]:
-    """Compute non-blocking quality telemetry for an Agent 2 layout."""
-    if agent_output.conflict_flag:
-        return {
-            "score": 0,
-            "status": "not_scored",
-            "total_penalty": 0,
-            "deductions": [],
-            "metadata": {"reason": "agent_2_conflict"},
-        }
-
+def _build_soft_scoring_context(
+    agent_input: Agent2Input, agent_output: Agent2Output
+) -> SoftScoringContext:
     footprint_width = agent_input.selected_program.footprint_width_ft
     footprint_depth = agent_input.selected_program.footprint_depth_ft
     footprint_area = footprint_width * footprint_depth
@@ -137,19 +193,11 @@ def score_agent_2_soft_rules(agent_input: Agent2Input, agent_output: Agent2Outpu
     interior_walls = [w for w in agent_output.walls_intent if w.kind == "interior"]
     doors = [o for o in agent_output.openings_intent if o.opening_type == "door"]
 
-    deductions: list[dict[str, Any]] = []
-
-    def add_deduction(code: str, penalty: int, description: str) -> None:
-        deductions.append(
-            {"code": code, "penalty": penalty, "description": description}
-        )
-
     total_room_area = sum(_room_area(room) for room in rooms)
     room_utilization = (total_room_area / footprint_area) if footprint_area > EPS else 0.0
     unassigned_pct = 1.0 - room_utilization
-    aspect_ratio = (
-        (footprint_width / footprint_depth) if footprint_depth > EPS else 0.0
-    )
+    aspect_ratio = (footprint_width / footprint_depth) if footprint_depth > EPS else 0.0
+
     recommended_open_plan = False
     if bedroom_count == 1:
         recommended_open_plan = True
@@ -158,36 +206,62 @@ def score_agent_2_soft_rules(agent_input: Agent2Input, agent_output: Agent2Outpu
     elif bedroom_count == 2 and footprint_area < 900:
         recommended_open_plan = True
 
-    # Section 1A: room budget
-    max_room_area = footprint_area * 0.81
-    if total_room_area > max_room_area + EPS:
-        add_deduction(
+    return SoftScoringContext(
+        agent_input=agent_input,
+        agent_output=agent_output,
+        footprint_width=footprint_width,
+        footprint_depth=footprint_depth,
+        footprint_area=footprint_area,
+        bedroom_count=bedroom_count,
+        rooms=rooms,
+        bedrooms=bedrooms,
+        bathrooms=bathrooms,
+        kitchens=kitchens,
+        livings=livings,
+        open_living_kitchens=open_living_kitchens,
+        plumbing_rooms=plumbing_rooms,
+        exterior_walls=exterior_walls,
+        interior_walls=interior_walls,
+        doors=doors,
+        total_room_area=total_room_area,
+        room_utilization=room_utilization,
+        unassigned_pct=unassigned_pct,
+        aspect_ratio=aspect_ratio,
+        recommended_open_plan=recommended_open_plan,
+    )
+
+
+def _rule_room_budget(ctx: SoftScoringContext, acc: SoftScoringAccumulator) -> None:
+    max_room_area = ctx.footprint_area * 0.81
+    if ctx.total_room_area > max_room_area + EPS:
+        acc.add_deduction(
             "ROOM_AREA_OVER_81_PCT",
             15,
             "Total room area exceeds 81% footprint budget.",
         )
-    if unassigned_pct < 0.14 or unassigned_pct > 0.21:
-        add_deduction(
+    if ctx.unassigned_pct < 0.14 or ctx.unassigned_pct > 0.21:
+        acc.add_deduction(
             "WALL_CIRCULATION_BUDGET_OFF_TARGET",
             8,
             "Walls + circulation are outside the 14%-21% expected range.",
         )
 
-    # Section 1B: open-plan recommendation
-    if recommended_open_plan and kitchens and livings:
-        if _shared_boundary_partition_exists(livings, kitchens, interior_walls):
-            add_deduction(
+
+def _rule_open_plan_partition(ctx: SoftScoringContext, acc: SoftScoringAccumulator) -> None:
+    if ctx.recommended_open_plan and ctx.kitchens and ctx.livings:
+        if _shared_boundary_partition_exists(ctx.livings, ctx.kitchens, ctx.interior_walls):
+            acc.add_deduction(
                 "OPEN_PLAN_RECOMMENDED_BUT_PARTITIONED",
                 8,
                 "Open plan is recommended, but a living-kitchen partition wall exists.",
             )
 
-    # Section 1C + 4B ADJ-6: zone ordering on long axis
-    axis = "x" if footprint_width >= footprint_depth else "y"
-    bed_center = _group_centroid_axis(bedrooms, axis=axis)
-    plumbing_center = _group_centroid_axis(plumbing_rooms, axis=axis)
-    living_zone_rooms = open_living_kitchens if open_living_kitchens else (livings + kitchens)
-    living_center = _group_centroid_axis(living_zone_rooms, axis=axis)
+
+def _rule_zone_order(ctx: SoftScoringContext, acc: SoftScoringAccumulator) -> None:
+    axis = ctx.long_axis
+    bed_center = _group_centroid_axis(ctx.bedrooms, axis=axis)
+    plumbing_center = _group_centroid_axis(ctx.plumbing_rooms, axis=axis)
+    living_center = _group_centroid_axis(ctx.living_zone_rooms, axis=axis)
     if (
         bed_center is not None
         and plumbing_center is not None
@@ -197,39 +271,40 @@ def score_agent_2_soft_rules(agent_input: Agent2Input, agent_output: Agent2Outpu
             bed_center > plumbing_center > living_center
         )
         if not valid_order:
-            add_deduction(
+            acc.add_deduction(
                 "ZONE_ORDER_INVALID",
                 20,
                 "Bedroom/plumbing/living zones are not in sequential order along the long axis.",
             )
-            add_deduction(
+            acc.add_deduction(
                 "NO_ZONE_BUFFER",
                 20,
                 "Plumbing core is not acting as a buffer between bedroom and living zones.",
             )
 
-    # Section 2: dimension minimums (telemetry only)
-    if bedroom_count == 1:
-        for bed in bedrooms:
+
+def _rule_dimension_minimums(ctx: SoftScoringContext, acc: SoftScoringAccumulator) -> None:
+    if ctx.bedroom_count == 1:
+        for bed in ctx.bedrooms:
             if (
                 bed.rect.width_ft < 10.0 - EPS
                 or bed.rect.depth_ft < 11.0 - EPS
                 or _room_area(bed) < 114.0 - EPS
             ):
-                add_deduction(
+                acc.add_deduction(
                     "BEDROOM_MIN_DIMENSION",
                     12,
                     f"Bedroom '{bed.room_id}' is below 1BR minimum dimensions.",
                 )
-    elif bedroom_count >= 2 and bedrooms:
-        sorted_bedrooms = sorted(bedrooms, key=_room_area, reverse=True)
+    elif ctx.bedroom_count >= 2 and ctx.bedrooms:
+        sorted_bedrooms = sorted(ctx.bedrooms, key=_room_area, reverse=True)
         primary = sorted_bedrooms[0]
         if (
             primary.rect.width_ft < 11.5 - EPS
             or primary.rect.depth_ft < 12.0 - EPS
             or _room_area(primary) < 131.0 - EPS
         ):
-            add_deduction(
+            acc.add_deduction(
                 "PRIMARY_BEDROOM_MIN_DIMENSION",
                 12,
                 f"Primary bedroom '{primary.room_id}' is below 2BR minimum dimensions.",
@@ -240,96 +315,104 @@ def score_agent_2_soft_rules(agent_input: Agent2Input, agent_output: Agent2Outpu
                 or secondary.rect.depth_ft < 11.0 - EPS
                 or _room_area(secondary) < 121.0 - EPS
             ):
-                add_deduction(
+                acc.add_deduction(
                     "SECONDARY_BEDROOM_MIN_DIMENSION",
                     10,
                     f"Secondary bedroom '{secondary.room_id}' is below minimum dimensions.",
                 )
 
-    for bath in bathrooms:
+    for bath in ctx.bathrooms:
         if (
             bath.rect.width_ft < 5.0 - EPS
             or bath.rect.depth_ft < 7.0 - EPS
             or _room_area(bath) < 35.0 - EPS
         ):
-            add_deduction(
+            acc.add_deduction(
                 "BATHROOM_MIN_DIMENSION",
                 10,
                 f"Bathroom '{bath.room_id}' is below minimum dimensions.",
             )
 
-    if recommended_open_plan:
+    if ctx.recommended_open_plan:
         combined_area = (
-            sum(_room_area(r) for r in open_living_kitchens)
-            if open_living_kitchens
-            else sum(_room_area(r) for r in livings + kitchens)
+            sum(_room_area(r) for r in ctx.open_living_kitchens)
+            if ctx.open_living_kitchens
+            else sum(_room_area(r) for r in ctx.livings + ctx.kitchens)
         )
         if combined_area < 160.0 - EPS:
-            add_deduction(
+            acc.add_deduction(
                 "OPEN_LIVING_KITCHEN_MIN_AREA",
                 10,
                 "Open living/kitchen area is below 160 sqft recommended minimum.",
             )
     else:
-        for kitchen in kitchens:
+        for kitchen in ctx.kitchens:
             if (
                 kitchen.rect.width_ft < 9.0 - EPS
                 or kitchen.rect.depth_ft < 8.0 - EPS
                 or _room_area(kitchen) < 72.0 - EPS
             ):
-                add_deduction(
+                acc.add_deduction(
                     "KITCHEN_MIN_DIMENSION",
                     8,
                     f"Kitchen '{kitchen.room_id}' is below standalone minimum dimensions.",
                 )
-        for living in livings:
+        for living in ctx.livings:
             if (
                 living.rect.width_ft < 9.5 - EPS
                 or living.rect.depth_ft < 6.5 - EPS
                 or _room_area(living) < 61.0 - EPS
             ):
-                add_deduction(
+                acc.add_deduction(
                     "LIVING_MIN_DIMENSION",
                     8,
                     f"Living room '{living.room_id}' is below standalone minimum dimensions.",
                 )
 
-    for corridor in [r for r in rooms if r.room_type == "circulation"]:
+    for corridor in [r for r in ctx.rooms if r.room_type == "circulation"]:
         if min(corridor.rect.width_ft, corridor.rect.depth_ft) < 3.5 - EPS:
-            add_deduction(
+            acc.add_deduction(
                 "HALLWAY_TOO_NARROW",
                 6,
                 f"Circulation room '{corridor.room_id}' is under 3.5ft clear width.",
             )
 
-    # Section 3: area budget ranges
-    def add_pct_range_deduction(
-        *,
-        actual_area: float,
-        min_pct: float,
-        max_pct: float,
-        code: str,
-        penalty: int,
-        description: str,
-    ) -> None:
-        if footprint_area <= EPS:
-            return
-        pct = actual_area / footprint_area
-        if pct < min_pct - EPS or pct > max_pct + EPS:
-            add_deduction(code, penalty, description)
 
-    if bedroom_count == 1 and bedrooms:
-        add_pct_range_deduction(
-            actual_area=sum(_room_area(b) for b in bedrooms),
+def _add_pct_range_deduction(
+    ctx: SoftScoringContext,
+    acc: SoftScoringAccumulator,
+    *,
+    actual_area: float,
+    min_pct: float,
+    max_pct: float,
+    code: str,
+    penalty: int,
+    description: str,
+) -> None:
+    if ctx.footprint_area <= EPS:
+        return
+    pct = actual_area / ctx.footprint_area
+    if pct < min_pct - EPS or pct > max_pct + EPS:
+        acc.add_deduction(code, penalty, description)
+
+
+def _rule_area_share_ranges(ctx: SoftScoringContext, acc: SoftScoringAccumulator) -> None:
+    if ctx.bedroom_count == 1 and ctx.bedrooms:
+        _add_pct_range_deduction(
+            ctx,
+            acc,
+            actual_area=sum(_room_area(b) for b in ctx.bedrooms),
             min_pct=0.22,
             max_pct=0.30,
             code="BEDROOM_AREA_SHARE_OUT_OF_RANGE",
             penalty=6,
             description="1BR bedroom area share is outside 22%-30%.",
         )
-    elif bedroom_count >= 2 and bedrooms:
-        sorted_beds = sorted(bedrooms, key=_room_area, reverse=True)
-        add_pct_range_deduction(
+    elif ctx.bedroom_count >= 2 and ctx.bedrooms:
+        sorted_beds = sorted(ctx.bedrooms, key=_room_area, reverse=True)
+        _add_pct_range_deduction(
+            ctx,
+            acc,
             actual_area=_room_area(sorted_beds[0]),
             min_pct=0.13,
             max_pct=0.18,
@@ -338,7 +421,9 @@ def score_agent_2_soft_rules(agent_input: Agent2Input, agent_output: Agent2Outpu
             description="Primary bedroom area share is outside 13%-18%.",
         )
         if len(sorted_beds) > 1:
-            add_pct_range_deduction(
+            _add_pct_range_deduction(
+                ctx,
+                acc,
                 actual_area=_room_area(sorted_beds[1]),
                 min_pct=0.12,
                 max_pct=0.16,
@@ -347,8 +432,10 @@ def score_agent_2_soft_rules(agent_input: Agent2Input, agent_output: Agent2Outpu
                 description="Secondary bedroom area share is outside 12%-16%.",
             )
 
-    for bath in bathrooms:
-        add_pct_range_deduction(
+    for bath in ctx.bathrooms:
+        _add_pct_range_deduction(
+            ctx,
+            acc,
             actual_area=_room_area(bath),
             min_pct=0.04,
             max_pct=0.09,
@@ -357,22 +444,26 @@ def score_agent_2_soft_rules(agent_input: Agent2Input, agent_output: Agent2Outpu
             description=f"Bathroom '{bath.room_id}' area share is outside 4%-9%.",
         )
 
-    if recommended_open_plan:
-        add_pct_range_deduction(
+    if ctx.recommended_open_plan:
+        _add_pct_range_deduction(
+            ctx,
+            acc,
             actual_area=(
-                sum(_room_area(r) for r in open_living_kitchens)
-                if open_living_kitchens
-                else sum(_room_area(r) for r in livings + kitchens)
+                sum(_room_area(r) for r in ctx.open_living_kitchens)
+                if ctx.open_living_kitchens
+                else sum(_room_area(r) for r in ctx.livings + ctx.kitchens)
             ),
-            min_pct=0.36 if bedroom_count == 1 else 0.32,
-            max_pct=0.44 if bedroom_count == 1 else 0.40,
+            min_pct=0.36 if ctx.bedroom_count == 1 else 0.32,
+            max_pct=0.44 if ctx.bedroom_count == 1 else 0.40,
             code="OPEN_LIVING_KITCHEN_AREA_SHARE_OUT_OF_RANGE",
             penalty=6,
             description="Open living/kitchen share is outside target range.",
         )
     else:
-        for kitchen in kitchens:
-            add_pct_range_deduction(
+        for kitchen in ctx.kitchens:
+            _add_pct_range_deduction(
+                ctx,
+                acc,
                 actual_area=_room_area(kitchen),
                 min_pct=0.16,
                 max_pct=0.22,
@@ -380,8 +471,10 @@ def score_agent_2_soft_rules(agent_input: Agent2Input, agent_output: Agent2Outpu
                 penalty=5,
                 description=f"Kitchen '{kitchen.room_id}' area share is outside 16%-22%.",
             )
-        for living in livings:
-            add_pct_range_deduction(
+        for living in ctx.livings:
+            _add_pct_range_deduction(
+                ctx,
+                acc,
                 actual_area=_room_area(living),
                 min_pct=0.12,
                 max_pct=0.18,
@@ -390,8 +483,10 @@ def score_agent_2_soft_rules(agent_input: Agent2Input, agent_output: Agent2Outpu
                 description=f"Living '{living.room_id}' area share is outside 12%-18%.",
             )
 
-    add_pct_range_deduction(
-        actual_area=sum(_room_area(r) for r in plumbing_rooms),
+    _add_pct_range_deduction(
+        ctx,
+        acc,
+        actual_area=sum(_room_area(r) for r in ctx.plumbing_rooms),
         min_pct=0.12,
         max_pct=0.20,
         code="PLUMBING_CORE_AREA_SHARE_OUT_OF_RANGE",
@@ -399,165 +494,231 @@ def score_agent_2_soft_rules(agent_input: Agent2Input, agent_output: Agent2Outpu
         description="Plumbing core total area is outside 12%-20%.",
     )
 
-    # Section 4A / 4B adjacency
-    if len(plumbing_rooms) > 1:
+
+def _rule_adjacency_and_access(ctx: SoftScoringContext, acc: SoftScoringAccumulator) -> None:
+    if len(ctx.plumbing_rooms) > 1:
         visited: set[str] = set()
-        stack = [plumbing_rooms[0].room_id]
-        room_lookup = {room.room_id: room for room in plumbing_rooms}
+        stack = [ctx.plumbing_rooms[0].room_id]
+        room_lookup = {room.room_id: room for room in ctx.plumbing_rooms}
         while stack:
             rid = stack.pop()
             if rid in visited:
                 continue
             visited.add(rid)
             room = room_lookup[rid]
-            for other in plumbing_rooms:
+            for other in ctx.plumbing_rooms:
                 if other.room_id in visited:
                     continue
                 if _rects_connected(room.rect, other.rect):
                     stack.append(other.room_id)
-        if len(visited) != len(plumbing_rooms):
-            add_deduction(
+        if len(visited) != len(ctx.plumbing_rooms):
+            acc.add_deduction(
                 "PLUMBING_CORE_FRAGMENTED",
                 25,
                 "Bathrooms/plumbing rooms are fragmented instead of clustered.",
             )
 
-    # Bathroom door facing/opening to kitchen.
-    for opening in doors:
-        touched = _opening_touches_room_types(opening, rooms)
+    for opening in ctx.doors:
+        touched = ctx.opening_touches_room_types(opening)
         if "bathroom" in touched and "kitchen" in touched:
-            add_deduction(
+            acc.add_deduction(
                 "BATH_DOOR_FACES_KITCHEN",
                 25,
                 f"Door '{opening.opening_id}' connects bathroom directly to kitchen.",
             )
             break
 
-    # Entry door placement (exterior door).
-    exterior_wall_ids = {wall.wall_id for wall in exterior_walls}
-    exterior_doors = [door for door in doors if door.wall_id in exterior_wall_ids]
+    exterior_wall_ids = {wall.wall_id for wall in ctx.exterior_walls}
+    exterior_doors = [door for door in ctx.doors if door.wall_id in exterior_wall_ids]
     if not exterior_doors:
-        add_deduction(
+        acc.add_deduction(
             "ENTRY_DOOR_MISSING",
             20,
             "No exterior entry door was found.",
         )
     else:
         entry = exterior_doors[0]
-        touched = _opening_touches_room_types(entry, rooms)
+        touched = ctx.opening_touches_room_types(entry)
         if "bedroom" in touched:
-            add_deduction(
+            acc.add_deduction(
                 "ENTRY_INTO_BEDROOM",
                 20,
                 "Entry door opens directly into a bedroom zone.",
             )
         elif not ({"living", "kitchen"} & touched):
-            add_deduction(
+            acc.add_deduction(
                 "ENTRY_INTO_HALLWAY_DEAD_END",
                 20,
                 "Entry door does not open into living zone.",
             )
 
+        bed_center = _group_centroid_axis(ctx.bedrooms, axis=ctx.long_axis)
+        living_center = _group_centroid_axis(ctx.living_zone_rooms, axis=ctx.long_axis)
         if bed_center is not None and living_center is not None:
-            axis_value = entry.anchor_local.x_ft if axis == "x" else entry.anchor_local.y_ft
-            expected_living_end = (
-                (footprint_width if axis == "x" else footprint_depth)
-                if living_center >= bed_center
-                else 0.0
+            axis_value = (
+                entry.anchor_local.x_ft
+                if ctx.long_axis == "x"
+                else entry.anchor_local.y_ft
             )
+            expected_living_end = (
+                ctx.footprint_width if ctx.long_axis == "x" else ctx.footprint_depth
+            ) if living_center >= bed_center else 0.0
             if abs(axis_value - expected_living_end) > 1.0:
-                add_deduction(
+                acc.add_deduction(
                     "ENTRY_NOT_ON_LIVING_ZONE_END",
                     10,
                     "Entry door is not located on the living-zone end of the shell.",
                 )
 
-    # Bedroom / living exterior wall access.
-    for bedroom in bedrooms:
+    for bedroom in ctx.bedrooms:
         edge_count = _room_exterior_edge_count(
-            bedroom.rect, footprint_width, footprint_depth
+            bedroom.rect, ctx.footprint_width, ctx.footprint_depth
         )
         if edge_count < 2:
-            add_deduction(
+            acc.add_deduction(
                 "BEDROOM_NO_EXTERIOR_WALL",
                 30,
                 f"Bedroom '{bedroom.room_id}' has fewer than two exterior shell edges.",
             )
-    if living_zone_rooms:
+    if ctx.living_zone_rooms:
         living_has_exterior = any(
-            _room_exterior_edge_count(room.rect, footprint_width, footprint_depth) >= 1
-            for room in living_zone_rooms
+            _room_exterior_edge_count(room.rect, ctx.footprint_width, ctx.footprint_depth) >= 1
+            for room in ctx.living_zone_rooms
         )
         if not living_has_exterior:
-            add_deduction(
+            acc.add_deduction(
                 "LIVING_NO_EXTERIOR_WALL",
                 15,
                 "Living zone has no exterior wall access.",
             )
 
-    # 2BR preferences.
-    if bedroom_count >= 2 and len(bedrooms) >= 2:
-        sorted_beds = sorted(bedrooms, key=_room_area, reverse=True)
+    if ctx.bedroom_count >= 2 and len(ctx.bedrooms) >= 2:
+        sorted_beds = sorted(ctx.bedrooms, key=_room_area, reverse=True)
         primary = sorted_beds[0]
         primary_has_bath_access = False
-        for opening in doors:
-            touched = _opening_touches_room_types(opening, rooms)
+        for opening in ctx.doors:
+            touched = ctx.opening_touches_room_types(opening)
             if "bathroom" not in touched:
                 continue
             if _point_on_room_boundary(primary.rect, opening.anchor_local):
                 primary_has_bath_access = True
                 break
         if not primary_has_bath_access:
-            add_deduction(
+            acc.add_deduction(
                 "PRIMARY_BEDROOM_NO_BATH_ACCESS",
                 15,
                 "Primary bedroom lacks direct bathroom door access.",
             )
 
         bathrooms_with_guest_access = 0
-        for bath in bathrooms:
+        for bath in ctx.bathrooms:
             has_guest_access = any(
                 _point_on_room_boundary(bath.rect, opening.anchor_local)
                 and bool(
                     {"living", "kitchen", "circulation"}
-                    & _opening_touches_room_types(opening, rooms)
+                    & ctx.opening_touches_room_types(opening)
                 )
-                for opening in doors
+                for opening in ctx.doors
             )
             if has_guest_access:
                 bathrooms_with_guest_access += 1
-        if bathrooms and bathrooms_with_guest_access == 0:
-            add_deduction(
+        if ctx.bathrooms and bathrooms_with_guest_access == 0:
+            acc.add_deduction(
                 "SECOND_BATH_NOT_GUEST_ACCESSIBLE",
                 15,
                 "No bathroom is directly accessible from common/guest space.",
             )
 
-        midpoint = (footprint_width / 2.0) if axis == "x" else (footprint_depth / 2.0)
+        midpoint = (
+            (ctx.footprint_width / 2.0)
+            if ctx.long_axis == "x"
+            else (ctx.footprint_depth / 2.0)
+        )
         bed_positions = [
-            (bed.rect.x_ft + bed.rect.width_ft / 2.0) if axis == "x" else (bed.rect.y_ft + bed.rect.depth_ft / 2.0)
-            for bed in bedrooms
+            (bed.rect.x_ft + bed.rect.width_ft / 2.0)
+            if ctx.long_axis == "x"
+            else (bed.rect.y_ft + bed.rect.depth_ft / 2.0)
+            for bed in ctx.bedrooms
         ]
-        if not (all(pos <= midpoint + EPS for pos in bed_positions) or all(pos >= midpoint - EPS for pos in bed_positions)):
-            add_deduction(
+        if not (
+            all(pos <= midpoint + EPS for pos in bed_positions)
+            or all(pos >= midpoint - EPS for pos in bed_positions)
+        ):
+            acc.add_deduction(
                 "BEDROOMS_NOT_CLUSTERED",
                 20,
                 "Bedrooms are split across opposite ends instead of clustered.",
             )
 
-    if kitchens:
+    if ctx.kitchens:
         kitchen_has_exterior = any(
-            _room_exterior_edge_count(k.rect, footprint_width, footprint_depth) >= 1
-            for k in kitchens
+            _room_exterior_edge_count(k.rect, ctx.footprint_width, ctx.footprint_depth) >= 1
+            for k in ctx.kitchens
         )
         if not kitchen_has_exterior:
-            add_deduction(
+            acc.add_deduction(
                 "KITCHEN_NO_EXTERIOR_WALL",
                 10,
                 "Kitchen lacks exterior wall adjacency (preferred for ventilation).",
             )
 
-    total_penalty = sum(int(item["penalty"]) for item in deductions)
+
+SOFT_SCORING_RULE_REGISTRY: tuple[SoftScoringRule, ...] = (
+    SoftScoringRule(
+        code="ROOM_BUDGET",
+        description="Room utilization and wall/circulation budget targets.",
+        apply=_rule_room_budget,
+    ),
+    SoftScoringRule(
+        code="OPEN_PLAN_PARTITION",
+        description="Open-plan recommendation should avoid partitioning.",
+        apply=_rule_open_plan_partition,
+    ),
+    SoftScoringRule(
+        code="ZONE_ORDER",
+        description="Bedroom/plumbing/living sequencing should follow long-axis zoning.",
+        apply=_rule_zone_order,
+    ),
+    SoftScoringRule(
+        code="DIMENSION_MINIMUMS",
+        description="Rooms should meet soft minimum dimensional guidance.",
+        apply=_rule_dimension_minimums,
+    ),
+    SoftScoringRule(
+        code="AREA_SHARE",
+        description="Area shares should fall within target ranges by room/program type.",
+        apply=_rule_area_share_ranges,
+    ),
+    SoftScoringRule(
+        code="ADJACENCY_ACCESS",
+        description="Plumbing clustering, entry placement, and access/circulation quality.",
+        apply=_rule_adjacency_and_access,
+    ),
+)
+
+
+def _run_soft_scoring_registry(
+    ctx: SoftScoringContext, acc: SoftScoringAccumulator
+) -> None:
+    for rule in SOFT_SCORING_RULE_REGISTRY:
+        rule.apply(ctx, acc)
+
+
+def score_agent_2_soft_rules(agent_input: Agent2Input, agent_output: Agent2Output) -> dict[str, Any]:
+    """Compute non-blocking quality telemetry for an Agent 2 layout."""
+    if agent_output.conflict_flag:
+        return {
+            "score": 0,
+            "status": "not_scored",
+            "total_penalty": 0,
+            "deductions": [],
+            "metadata": {"reason": "agent_2_conflict"},
+        }
+    ctx = _build_soft_scoring_context(agent_input, agent_output)
+    accumulator = SoftScoringAccumulator()
+    _run_soft_scoring_registry(ctx, accumulator)
+
+    total_penalty = sum(int(item["penalty"]) for item in accumulator.deductions)
     score = max(0, 100 - total_penalty)
     if score >= 80:
         status = "PASS"
@@ -570,15 +731,15 @@ def score_agent_2_soft_rules(agent_input: Agent2Input, agent_output: Agent2Outpu
         "score": score,
         "status": status,
         "total_penalty": total_penalty,
-        "deductions": deductions,
+        "deductions": accumulator.deductions,
         "metadata": {
-            "footprint_area_sf": round(footprint_area, 4),
-            "total_room_area_sf": round(total_room_area, 4),
-            "room_utilization_pct": round(room_utilization, 4),
-            "unassigned_pct": round(unassigned_pct, 4),
-            "aspect_ratio": round(aspect_ratio, 4),
-            "recommended_open_plan": recommended_open_plan,
-            "bedroom_count": bedroom_count,
+            "footprint_area_sf": round(ctx.footprint_area, 4),
+            "total_room_area_sf": round(ctx.total_room_area, 4),
+            "room_utilization_pct": round(ctx.room_utilization, 4),
+            "unassigned_pct": round(ctx.unassigned_pct, 4),
+            "aspect_ratio": round(ctx.aspect_ratio, 4),
+            "recommended_open_plan": ctx.recommended_open_plan,
+            "bedroom_count": ctx.bedroom_count,
             "sections_6_7_dropped": True,
         },
     }
