@@ -57,6 +57,7 @@ class SoftScoringContext:
     exterior_walls: list[Any]
     interior_walls: list[Any]
     doors: list[OpeningIntent]
+    room_groups_by_type: dict[str, list[RoomIntent]]
     total_room_area: float
     room_utilization: float
     unassigned_pct: float
@@ -261,6 +262,9 @@ def _build_soft_scoring_context(
     exterior_walls = [w for w in agent_output.walls_intent if w.kind == "exterior"]
     interior_walls = [w for w in agent_output.walls_intent if w.kind == "interior"]
     doors = [o for o in agent_output.openings_intent if o.opening_type == "door"]
+    room_groups_by_type: dict[str, list[RoomIntent]] = {}
+    for room in rooms:
+        room_groups_by_type.setdefault(room.room_type, []).append(room)
 
     total_room_area = sum(_room_area(room) for room in rooms)
     room_utilization = (total_room_area / footprint_area) if footprint_area > EPS else 0.0
@@ -296,6 +300,7 @@ def _build_soft_scoring_context(
         exterior_walls=exterior_walls,
         interior_walls=interior_walls,
         doors=doors,
+        room_groups_by_type=room_groups_by_type,
         total_room_area=total_room_area,
         room_utilization=room_utilization,
         unassigned_pct=unassigned_pct,
@@ -350,6 +355,31 @@ def _rule_convexity_rectangularity(
                 f"(ratio={ctx.room_rectangularity_ratio:.3f})."
             ),
         )
+
+
+def _rule_singleton_room_convexity(
+    ctx: SoftScoringContext, acc: SoftScoringAccumulator
+) -> None:
+    required_counts = ctx.agent_input.layout_rules.required_room_counts
+    singleton_room_types = {
+        room_type
+        for room_type, required_count in required_counts.items()
+        if required_count == 1
+    }
+    for room_type in singleton_room_types:
+        grouped_rooms = ctx.room_groups_by_type.get(room_type, [])
+        if len(grouped_rooms) <= 1:
+            continue
+        _, rectangularity_ratio, axis_convex = _compute_layout_shape_metrics(grouped_rooms)
+        if (not axis_convex) or rectangularity_ratio < 0.80 - EPS:
+            acc.add_deduction(
+                "ROOM_ZONE_RECTANGULARITY_LOW",
+                15,
+                (
+                    f"Singleton room type '{room_type}' is split into {len(grouped_rooms)} "
+                    f"pieces with low convexity/rectangularity (ratio={rectangularity_ratio:.3f})."
+                ),
+            )
 
 
 def _rule_zone_order(ctx: SoftScoringContext, acc: SoftScoringAccumulator) -> None:
@@ -773,6 +803,11 @@ SOFT_SCORING_RULE_REGISTRY: tuple[SoftScoringRule, ...] = (
         code="CONVEXITY_RECTANGULARITY",
         description="Prefer convex, compact room unions over fragmented shapes.",
         apply=_rule_convexity_rectangularity,
+    ),
+    SoftScoringRule(
+        code="SINGLETON_ROOM_CONVEXITY",
+        description="Singleton room zones should not split into jagged wrap-around pieces.",
+        apply=_rule_singleton_room_convexity,
     ),
     SoftScoringRule(
         code="ZONE_ORDER",

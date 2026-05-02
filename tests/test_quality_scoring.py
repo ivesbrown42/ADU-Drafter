@@ -83,6 +83,7 @@ def test_quality_score_convexity_rectangularity_no_penalty_for_compact_layout() 
 
     assert "LAYOUT_CONVEXITY_GAP" not in codes
     assert "LAYOUT_RECTANGULARITY_LOW" not in codes
+    assert "SINGLETON_ROOM_ZONE_NON_RECTANGULAR" not in codes
     assert score["metadata"]["layout_axis_convex"] is True
     assert score["metadata"]["layout_rectangularity_ratio"] == 1.0
 
@@ -113,4 +114,36 @@ def test_quality_score_convexity_rectangularity_penalizes_fragmented_layout() ->
     assert deductions_by_code["LAYOUT_RECTANGULARITY_LOW"]["penalty"] == 8
     assert score["metadata"]["layout_axis_convex"] is False
     assert score["metadata"]["layout_rectangularity_ratio"] < 0.8
+
+
+def test_quality_score_singleton_room_zone_penalizes_wraparound_split() -> None:
+    agent1_input_payload = _load_json("tests/fixtures/golden/agent_1_input.json")
+    agent1_output_payload = _load_json("tests/fixtures/golden/agent_1_output.json")
+    agent2_output_payload = _load_json("data/eval_cases/case_happy/agent_2_output_candidate_better.json")
+
+    agent1_input = Agent1Input.model_validate(agent1_input_payload)
+    agent1_output = Agent1Output.model_validate(agent1_output_payload)
+    agent2_input = build_agent_2_input(agent1_input, agent1_output)
+    agent2_output = Agent2Output.model_validate(agent2_output_payload)
+
+    # Simulate the anomaly: bedroom emitted as two wrapped/split pieces.
+    for room in agent2_output.rooms:
+        if room.room_id == "bed-1":
+            room.rect.x_ft = 0
+            room.rect.y_ft = 19
+            room.rect.width_ft = 5
+            room.rect.depth_ft = 11
+            break
+    duplicate_bedroom_piece = agent2_output.rooms[1].model_copy(deep=True)
+    duplicate_bedroom_piece.room_id = "bed-1-wing"
+    duplicate_bedroom_piece.rect.x_ft = 10
+    duplicate_bedroom_piece.rect.y_ft = 19
+    duplicate_bedroom_piece.rect.width_ft = 5
+    duplicate_bedroom_piece.rect.depth_ft = 11
+    agent2_output.rooms.append(duplicate_bedroom_piece)
+
+    score = score_agent2_layout(agent2_input, agent2_output)
+    deductions_by_code = {item["code"]: item for item in score["deductions"]}
+    assert "ROOM_ZONE_RECTANGULARITY_LOW" in deductions_by_code
+    assert deductions_by_code["ROOM_ZONE_RECTANGULARITY_LOW"]["penalty"] == 15
 
