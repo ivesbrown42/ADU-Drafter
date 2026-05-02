@@ -2,3 +2,4 @@ pydantic
 shapely
 ezdxf
 pytest
+openai>=1.0.0
