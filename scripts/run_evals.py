@@ -52,6 +52,32 @@ def _categorize_failure(message: str) -> str:
     return "other"
 
 
+def _duplicate_values(values: list[str]) -> list[str]:
+    counts = Counter(values)
+    return sorted(value for value, count in counts.items() if count > 1)
+
+
+def _warn_duplicate_candidate_outputs(case: dict[str, Any]) -> list[str]:
+    raw_candidates = case.get("agent_2_candidate_outputs")
+    if raw_candidates is None:
+        return []
+
+    candidates = [
+        str(candidate_path)
+        for candidate_path in _ensure_list(
+            raw_candidates, "agent_2_candidate_outputs"
+        )
+    ]
+    duplicates = _duplicate_values(candidates)
+    if duplicates:
+        case_id = case.get("case_id", "<unknown-case>")
+        print(
+            f"[warning] Case '{case_id}' has duplicate agent_2_candidate_outputs entries: "
+            f"{duplicates}. Best-of-N diversity may be reduced."
+        )
+    return duplicates
+
+
 def _attempt_run(
     *,
     case: dict[str, Any],
@@ -427,6 +453,7 @@ def run(args: argparse.Namespace) -> int:
             raise ValueError("Each corpus case requires case_id")
         if "agent_1_input" not in case or "agent_1_output" not in case:
             raise ValueError(f"Case '{case.get('case_id', '?')}' missing agent_1_input/output")
+        _warn_duplicate_candidate_outputs(case)
 
         result = _evaluate_case(
             case,
