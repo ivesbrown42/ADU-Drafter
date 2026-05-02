@@ -1,0 +1,20 @@
+{
+  "lot_width": 50.0,
+  "lot_depth": 120.0,
+  "setbacks": {
+    "front": 15.0,
+    "rear": 16.0,
+    "left": 5.0,
+    "right": 5.0
+  },
+  "existing_structures": [
+    {
+      "name": "Primary Residence",
+      "x_min": 10.0,
+      "y_min": 20.0,
+      "x_max": 40.0,
+      "y_max": 55.0,
+      "separation_req": 6.0
+    }
+  ]
+}

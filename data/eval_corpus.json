@@ -1,0 +1,72 @@
+[
+  {
+    "case_id": "tier1-happy",
+    "tier": "tier1-happy-path",
+    "expected_outcome": "success",
+    "agent_1_input": "data/eval_cases/case_happy/agent_1_input.json",
+    "agent_1_output": "data/eval_cases/case_happy/agent_1_output.json",
+    "agent_2_candidate_outputs": [
+      "data/eval_cases/case_happy/agent_2_output.json",
+      "data/eval_cases/case_happy/agent_2_output_candidate_better.json",
+      "data/eval_cases/case_happy/agent_2_output.json",
+      "data/eval_cases/case_happy/agent_2_output_candidate_better.json",
+      "data/eval_cases/case_happy/agent_2_output_candidate_better.json"
+    ],
+    "best_of_n": 5,
+    "max_attempts": 1
+  },
+  {
+    "case_id": "tier2-obstacle-retry",
+    "tier": "tier2-obstacle-course",
+    "expected_outcome": "success",
+    "agent_1_input": "data/eval_cases/case_retry/agent_1_input.json",
+    "agent_1_output": "data/eval_cases/case_retry/agent_1_output.json",
+    "agent_2_attempts": [
+      "data/eval_cases/case_retry/agent_2_output.json",
+      "data/eval_cases/case_retry/agent_2_output_attempt2.json"
+    ],
+    "max_attempts": 2,
+    "schema_retries_per_attempt": 1
+  },
+  {
+    "case_id": "tier3-conflict",
+    "tier": "tier3-la-gauntlet",
+    "expected_outcome": "conflict",
+    "agent_1_input": "data/eval_cases/case_conflict/agent_1_input.json",
+    "agent_1_output": "data/eval_cases/case_conflict/agent_1_output.json",
+    "max_attempts": 1
+  },
+  {
+    "case_id": "case-house-in-front",
+    "tier": "tier2-existing-structures",
+    "expected_outcome": "success",
+    "agent_1_input": "data/eval_cases/case_house_in_front/agent_1_input.json",
+    "agent_1_output": "data/eval_cases/case_house_in_front/agent_1_output.json",
+    "agent_2_attempts": [
+      "data/eval_cases/case_house_in_front/agent_2_output.json"
+    ],
+    "max_attempts": 1
+  },
+  {
+    "case_id": "case-house-in-middle",
+    "tier": "tier2-existing-structures",
+    "expected_outcome": "success",
+    "agent_1_input": "data/eval_cases/case_house_in_middle/agent_1_input.json",
+    "agent_1_output": "data/eval_cases/case_house_in_middle/agent_1_output.json",
+    "agent_2_attempts": [
+      "data/eval_cases/case_house_in_middle/agent_2_output.json"
+    ],
+    "max_attempts": 1
+  },
+  {
+    "case_id": "case-house-and-garage",
+    "tier": "tier2-existing-structures",
+    "expected_outcome": "success",
+    "agent_1_input": "data/eval_cases/case_house_and_garage/agent_1_input.json",
+    "agent_1_output": "data/eval_cases/case_house_and_garage/agent_1_output.json",
+    "agent_2_attempts": [
+      "data/eval_cases/case_house_and_garage/agent_2_output.json"
+    ],
+    "max_attempts": 1
+  }
+]
