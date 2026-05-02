@@ -55,6 +55,29 @@ def test_quality_score_convexity_rectangularity_no_penalty_for_compact_layout() 
     agent2_input = build_agent_2_input(agent1_input, agent1_output)
     agent2_output = Agent2Output.model_validate(agent2_output_payload)
 
+    # Repack rooms into a simple contiguous rectangle to avoid shape penalties.
+    for room in agent2_output.rooms:
+        if room.room_id == "open-lk-1":
+            room.rect.x_ft = 0
+            room.rect.y_ft = 0
+            room.rect.width_ft = 15
+            room.rect.depth_ft = 10
+        elif room.room_id == "bath-1":
+            room.rect.x_ft = 0
+            room.rect.y_ft = 10
+            room.rect.width_ft = 5
+            room.rect.depth_ft = 9
+        elif room.room_id == "storage-1":
+            room.rect.x_ft = 5
+            room.rect.y_ft = 10
+            room.rect.width_ft = 10
+            room.rect.depth_ft = 9
+        elif room.room_id == "bed-1":
+            room.rect.x_ft = 0
+            room.rect.y_ft = 19
+            room.rect.width_ft = 15
+            room.rect.depth_ft = 11
+
     score = score_agent2_layout(agent2_input, agent2_output)
     codes = {item["code"] for item in score["deductions"]}
 
