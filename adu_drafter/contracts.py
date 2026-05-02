@@ -946,6 +946,38 @@ def _rule_total_room_area_within_zone(ctx: Agent2ValidationContext) -> None:
         raise ValueError("Total room area exceeds selected zone area")
 
 
+def _rule_exterior_shell_matches_program_footprint(ctx: Agent2ValidationContext) -> None:
+    exterior_walls = [
+        wall for wall in ctx.agent_output.walls_intent if wall.kind == "exterior"
+    ]
+    if len(exterior_walls) < 4:
+        raise ValueError(
+            "Error: FOOTPRINT_SCALE_MISMATCH. Expected at least four exterior walls "
+            "to define the footprint shell."
+        )
+
+    x_values: list[float] = []
+    y_values: list[float] = []
+    for wall in exterior_walls:
+        x_values.extend([wall.start_local.x_ft, wall.end_local.x_ft])
+        y_values.extend([wall.start_local.y_ft, wall.end_local.y_ft])
+
+    min_x = min(x_values)
+    max_x = max(x_values)
+    min_y = min(y_values)
+    max_y = max(y_values)
+    if abs(min_x - 0.0) > 1e-6 or abs(min_y - 0.0) > 1e-6:
+        raise ValueError(
+            "Error: FOOTPRINT_SCALE_MISMATCH. Exterior shell must be anchored at "
+            "(0,0) in zone-local feet."
+        )
+    if abs(max_x - ctx.footprint_width_ft) > 1e-6 or abs(max_y - ctx.footprint_depth_ft) > 1e-6:
+        raise ValueError(
+            "Error: FOOTPRINT_SCALE_MISMATCH. Exterior shell extents do not match "
+            "selected_program footprint dimensions. Reject normalized 0..100 style coordinates."
+        )
+
+
 def _rule_room_minimum_dimensions(ctx: Agent2ValidationContext) -> None:
     guideline_by_type = _default_minimum_room_dimensions()
     guideline_by_type.update(ctx.layout_rules.minimum_room_dimensions)
@@ -1063,6 +1095,11 @@ AGENT2_HARD_RULE_REGISTRY: tuple[HardValidationRule, ...] = (
         code="TOTAL_ROOM_AREA_EXCEEDS_ZONE",
         description="Total room area must not exceed selected zone area.",
         check=_rule_total_room_area_within_zone,
+    ),
+    HardValidationRule(
+        code="FOOTPRINT_SCALE_MISMATCH",
+        description="Exterior shell extents must exactly match selected program footprint dimensions.",
+        check=_rule_exterior_shell_matches_program_footprint,
     ),
     HardValidationRule(
         code="PROPORTION_VIOLATION",

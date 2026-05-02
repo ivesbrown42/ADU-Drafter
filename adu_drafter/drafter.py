@@ -30,6 +30,11 @@ INTERIOR_WALL_THICKNESS_FT = 4.0 / 12.0  # 4 in total partition
 OPENING_CUT_OVERTRIM_FT = 0.02
 
 
+def _set_document_units_feet(doc: ezdxf.document.Drawing) -> None:
+    # Force insertion units to feet to avoid downstream CAD auto-scaling.
+    doc.header["$INSUNITS"] = 2
+
+
 def _draw_walls(doc: ezdxf.document.Drawing, brief: ADUDesignBrief) -> None:
     msp = doc.modelspace()
     for wall in brief.walls:
@@ -87,6 +92,7 @@ def generate_dxf_from_brief(
         )
 
     doc = ezdxf.readfile(template_path)
+    _set_document_units_feet(doc)
     _draw_walls(doc, brief)
     _insert_blocks(doc, brief)
 
@@ -531,6 +537,7 @@ def generate_dxf_from_instructions(
         )
 
     doc = ezdxf.readfile(template_path)
+    _set_document_units_feet(doc)
     _draw_site_context(doc, instructions)
     _draw_floor_plan_detail(
         doc,

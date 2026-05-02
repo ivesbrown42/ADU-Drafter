@@ -570,3 +570,70 @@ def test_orchestrator_best_of_n_rejects_duplicate_geometry_when_enabled(
     resolver_payload = json.loads(resolver_out.read_text(encoding="utf-8"))
     # Duplicate-b has the highest score but is duplicate and should be skipped.
     assert resolver_payload["agent_2_output"]["design_summary"]["layout_type"] == "unique-c"
+
+
+def test_orchestrator_rejects_exterior_shell_not_matching_footprint(tmp_path: Path):
+    a1_in = tmp_path / "agent_1_input.json"
+    a1_out = tmp_path / "agent_1_output.json"
+    a2_out = tmp_path / "agent_2_output.json"
+    resolver_out = tmp_path / "geometry_resolver_input.json"
+    conflict_out = tmp_path / "conflict.json"
+
+    _write(a1_in, _valid_agent1_input())
+    _write(a1_out, _valid_agent1_output())
+
+    invalid = _valid_agent2_output()
+    # Simulate shell drift that stays in-bounds but no longer matches footprint extents.
+    interior_walls = [wall for wall in invalid["walls_intent"] if wall["kind"] == "interior"]
+    invalid["walls_intent"] = [
+        {
+            "wall_id": "w-ext-bottom",
+            "kind": "exterior",
+            "start_local": {"x_ft": 0.0, "y_ft": 0.0},
+            "end_local": {"x_ft": 19.0, "y_ft": 0.0},
+            "thickness_ft": 0.5,
+        },
+        {
+            "wall_id": "w-ext-right",
+            "kind": "exterior",
+            "start_local": {"x_ft": 19.0, "y_ft": 0.0},
+            "end_local": {"x_ft": 19.0, "y_ft": 30.0},
+            "thickness_ft": 0.5,
+        },
+        {
+            "wall_id": "w-ext-top",
+            "kind": "exterior",
+            "start_local": {"x_ft": 19.0, "y_ft": 30.0},
+            "end_local": {"x_ft": 0.0, "y_ft": 30.0},
+            "thickness_ft": 0.5,
+        },
+        {
+            "wall_id": "w-ext-left",
+            "kind": "exterior",
+            "start_local": {"x_ft": 0.0, "y_ft": 30.0},
+            "end_local": {"x_ft": 0.0, "y_ft": 0.0},
+            "thickness_ft": 0.5,
+        },
+        *interior_walls,
+    ]
+    _write(a2_out, invalid)
+
+    args = Namespace(
+        agent_1_input=a1_in,
+        agent_1_output=a1_out,
+        agent_2_output=a2_out,
+        resolver_output=resolver_out,
+        conflict_output=conflict_out,
+        retry_poll_seconds=0.0,
+        grid_step_ft=0.5,
+        wall_thickness_options_ft=[0.35, 0.5],
+        max_retry_iteration=3,
+        schema_retries=1,
+        input_coordinates_normalized_to_sw=True,
+    )
+
+    try:
+        run_orchestration(args)
+        assert False, "Expected shell-bounds mismatch to fail validation"
+    except ValueError as exc:
+        assert "FOOTPRINT_SCALE_MISMATCH" in str(exc)

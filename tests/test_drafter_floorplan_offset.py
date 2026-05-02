@@ -124,3 +124,20 @@ def test_interior_walls_render_as_merged_polygons(tmp_path) -> None:
     intr_lines = _count_layer_entities(str(out), "A-WALL-INTR", dxftype="LINE")
     assert intr_polylines > 0
     assert intr_lines == 0
+
+
+def test_generated_dxf_explicitly_sets_units_to_feet(tmp_path) -> None:
+    instructions = "tests/fixtures/golden/resolved_drawing_instructions.json"
+    template = "data/template.dxf"
+    out = tmp_path / "units_feet.dxf"
+
+    generate_dxf_from_instruction_file(
+        instruction_path=instructions,
+        template_path=template,
+        output_path=out,
+        floorplan_origin_x=100.0,
+        floorplan_origin_y=0.0,
+    )
+
+    doc = ezdxf.readfile(out)
+    assert doc.units == 2
