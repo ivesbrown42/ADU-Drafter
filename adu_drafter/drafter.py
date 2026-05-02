@@ -29,6 +29,20 @@ EXTERIOR_WALL_THICKNESS_FT = 0.5  # 6 in
 INTERIOR_WALL_THICKNESS_FT = 4.0 / 12.0  # 4 in total partition
 OPENING_CUT_OVERTRIM_FT = 0.02
 
+# DXF unit constants (INSUNITS header values)
+_DXF_INSUNITS_FEET = 2
+_DXF_MEASUREMENT_IMPERIAL = 0
+
+
+def _set_document_units_to_feet(doc: ezdxf.document.Drawing) -> None:
+    """Force the DXF document to Imperial Feet so all viewers scale correctly.
+
+    Without this, viewers that default to metric will interpret every
+    coordinate as metres, scaling a 30-ft building to ~98 ft on screen.
+    """
+    doc.header["$INSUNITS"] = _DXF_INSUNITS_FEET
+    doc.header["$MEASUREMENT"] = _DXF_MEASUREMENT_IMPERIAL
+
 
 def _draw_walls(doc: ezdxf.document.Drawing, brief: ADUDesignBrief) -> None:
     msp = doc.modelspace()
@@ -44,7 +58,6 @@ def _draw_walls(doc: ezdxf.document.Drawing, brief: ADUDesignBrief) -> None:
 
 def _insert_blocks(doc: ezdxf.document.Drawing, brief: ADUDesignBrief) -> None:
     msp = doc.modelspace()
-    # ezdxf may normalize block names, so resolve user contract names case-insensitively.
     block_index = {name.lower(): name for name in doc.blocks.block_names()}
     available_blocks = set(block_index.values())
     for block in brief.blocks:
@@ -87,6 +100,7 @@ def generate_dxf_from_brief(
         )
 
     doc = ezdxf.readfile(template_path)
+    _set_document_units_to_feet(doc)
     _draw_walls(doc, brief)
     _insert_blocks(doc, brief)
 
@@ -317,9 +331,7 @@ def _draw_exterior_shell(
     footprint_points: list[tuple[float, float]],
     shell_thickness_ft: float = EXTERIOR_WALL_THICKNESS_FT,
 ) -> None:
-    # Draw outer face.
     _draw_polyline(doc, footprint_points, WALL_EXTR_LAYER)
-    # Draw inner face as an inset rectangle for schematic wall thickness.
     inner_bounds = _interior_shell_bounds(footprint_points, shell_thickness_ft)
     if inner_bounds is not None:
         inner_min_x, inner_min_y, inner_max_x, inner_max_y = inner_bounds
@@ -531,6 +543,7 @@ def generate_dxf_from_instructions(
         )
 
     doc = ezdxf.readfile(template_path)
+    _set_document_units_to_feet(doc)
     _draw_site_context(doc, instructions)
     _draw_floor_plan_detail(
         doc,
