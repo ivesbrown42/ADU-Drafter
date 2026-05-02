@@ -62,6 +62,8 @@ class SoftScoringContext:
     unassigned_pct: float
     aspect_ratio: float
     recommended_open_plan: bool
+    room_rectangularity_ratio: float
+    room_axis_convex: bool
 
     @property
     def living_zone_rooms(self) -> list[RoomIntent]:
@@ -173,6 +175,73 @@ def _shared_boundary_partition_exists(
     return False
 
 
+def _merge_intervals(intervals: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    if not intervals:
+        return []
+    merged: list[tuple[float, float]] = []
+    for start, end in sorted(intervals, key=lambda pair: pair[0]):
+        if not merged or start > merged[-1][1] + EPS:
+            merged.append((start, end))
+            continue
+        merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+    return merged
+
+
+def _compute_layout_shape_metrics(rooms: list[RoomIntent]) -> tuple[float, float, bool]:
+    """Return (union_area, rectangularity_ratio, axis_convex)."""
+    if not rooms:
+        return 0.0, 1.0, True
+
+    rects = [room.rect for room in rooms]
+    min_x = min(rect.x_ft for rect in rects)
+    max_x = max(rect.max_x for rect in rects)
+    min_y = min(rect.y_ft for rect in rects)
+    max_y = max(rect.max_y for rect in rects)
+    bbox_area = max(0.0, (max_x - min_x)) * max(0.0, (max_y - min_y))
+
+    x_breaks = sorted({rect.x_ft for rect in rects} | {rect.max_x for rect in rects})
+    y_breaks = sorted({rect.y_ft for rect in rects} | {rect.max_y for rect in rects})
+
+    union_area = 0.0
+    has_multi_span_x = False
+    for idx in range(len(x_breaks) - 1):
+        x1 = x_breaks[idx]
+        x2 = x_breaks[idx + 1]
+        slab_width = x2 - x1
+        if slab_width <= EPS:
+            continue
+        intervals = [
+            (rect.y_ft, rect.max_y)
+            for rect in rects
+            if rect.x_ft < x2 - EPS and rect.max_x > x1 + EPS
+        ]
+        merged = _merge_intervals(intervals)
+        if len(merged) > 1:
+            has_multi_span_x = True
+        covered_height = sum(end - start for start, end in merged)
+        union_area += slab_width * covered_height
+
+    has_multi_span_y = False
+    for idx in range(len(y_breaks) - 1):
+        y1 = y_breaks[idx]
+        y2 = y_breaks[idx + 1]
+        slab_depth = y2 - y1
+        if slab_depth <= EPS:
+            continue
+        intervals = [
+            (rect.x_ft, rect.max_x)
+            for rect in rects
+            if rect.y_ft < y2 - EPS and rect.max_y > y1 + EPS
+        ]
+        merged = _merge_intervals(intervals)
+        if len(merged) > 1:
+            has_multi_span_y = True
+
+    rectangularity_ratio = (union_area / bbox_area) if bbox_area > EPS else 1.0
+    axis_convex = not (has_multi_span_x or has_multi_span_y)
+    return union_area, rectangularity_ratio, axis_convex
+
+
 def _build_soft_scoring_context(
     agent_input: Agent2Input, agent_output: Agent2Output
 ) -> SoftScoringContext:
@@ -206,6 +275,10 @@ def _build_soft_scoring_context(
     elif bedroom_count == 2 and footprint_area < 900:
         recommended_open_plan = True
 
+    _room_union_area, room_rectangularity_ratio, room_axis_convex = _compute_layout_shape_metrics(
+        rooms
+    )
+
     return SoftScoringContext(
         agent_input=agent_input,
         agent_output=agent_output,
@@ -228,6 +301,8 @@ def _build_soft_scoring_context(
         unassigned_pct=unassigned_pct,
         aspect_ratio=aspect_ratio,
         recommended_open_plan=recommended_open_plan,
+        room_rectangularity_ratio=room_rectangularity_ratio,
+        room_axis_convex=room_axis_convex,
     )
 
 
@@ -255,6 +330,26 @@ def _rule_open_plan_partition(ctx: SoftScoringContext, acc: SoftScoringAccumulat
                 8,
                 "Open plan is recommended, but a living-kitchen partition wall exists.",
             )
+
+
+def _rule_convexity_rectangularity(
+    ctx: SoftScoringContext, acc: SoftScoringAccumulator
+) -> None:
+    if not ctx.room_axis_convex:
+        acc.add_deduction(
+            "LAYOUT_CONVEXITY_GAP",
+            10,
+            "Room union has multi-span slices (shape is non-convex/disconnected).",
+        )
+    if ctx.room_rectangularity_ratio < 0.80 - EPS:
+        acc.add_deduction(
+            "LAYOUT_RECTANGULARITY_LOW",
+            8,
+            (
+                "Room union fills under 80% of its occupied bounding box "
+                f"(ratio={ctx.room_rectangularity_ratio:.3f})."
+            ),
+        )
 
 
 def _rule_zone_order(ctx: SoftScoringContext, acc: SoftScoringAccumulator) -> None:
@@ -675,6 +770,11 @@ SOFT_SCORING_RULE_REGISTRY: tuple[SoftScoringRule, ...] = (
         apply=_rule_open_plan_partition,
     ),
     SoftScoringRule(
+        code="CONVEXITY_RECTANGULARITY",
+        description="Prefer convex, compact room unions over fragmented shapes.",
+        apply=_rule_convexity_rectangularity,
+    ),
+    SoftScoringRule(
         code="ZONE_ORDER",
         description="Bedroom/plumbing/living sequencing should follow long-axis zoning.",
         apply=_rule_zone_order,
@@ -740,6 +840,8 @@ def score_agent_2_soft_rules(agent_input: Agent2Input, agent_output: Agent2Outpu
             "aspect_ratio": round(ctx.aspect_ratio, 4),
             "recommended_open_plan": ctx.recommended_open_plan,
             "bedroom_count": ctx.bedroom_count,
+            "layout_rectangularity_ratio": round(ctx.room_rectangularity_ratio, 4),
+            "layout_axis_convex": ctx.room_axis_convex,
             "sections_6_7_dropped": True,
         },
     }
