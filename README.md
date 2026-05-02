@@ -190,3 +190,39 @@ Example telemetry from sample corpus:
 - hard failure rate
 - average retries per success
 - top failure nodes (bounds/overlap/snap/host-wall/schema)
+
+## Agent 2 Candidate Prompt Builder (Semantic Jitter)
+
+Generate deterministic Agent 2 prompt payloads that force spatially distinct
+candidate layouts before Best-of-N selection.
+
+The helper emits five variants using anchor constraints:
+
+1. bedroom touches north wall
+2. bedroom touches south wall
+3. bedroom touches east wall
+4. bedroom touches west wall
+5. open_living_kitchen occupies southern half of footprint
+
+```bash
+python3 scripts/build_agent2_candidate_prompts.py \
+  --agent-2-input generated_adu_bestofn_test_input.json \
+  --output-dir data/agent2_candidate_prompts
+```
+
+Outputs:
+
+- `data/agent2_candidate_prompts/agent2_candidate_prompt_1_north_bedroom.json`
+- `data/agent2_candidate_prompts/agent2_candidate_prompt_2_south_bedroom.json`
+- `data/agent2_candidate_prompts/agent2_candidate_prompt_3_east_bedroom.json`
+- `data/agent2_candidate_prompts/agent2_candidate_prompt_4_west_bedroom.json`
+- `data/agent2_candidate_prompts/agent2_candidate_prompt_5_south_living_half.json`
+
+Each payload includes:
+
+- `llm_sampling` (`temperature=0.7`, `top_p=0.9`)
+- `semantic_jitter.anchor_directive`
+- `agent2_input` (validated canonical input contract)
+
+Use these payloads in your upstream LLM runner to produce diverse
+`agent_2_output` candidates for Best-of-N orchestration.
