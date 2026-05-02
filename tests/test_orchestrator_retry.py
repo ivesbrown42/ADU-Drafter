@@ -394,6 +394,8 @@ def test_orchestrator_best_of_n_selects_highest_scoring_valid_candidate(
         agent_2_output=None,
         agent_2_candidate_outputs=[a2_candidate_1, a2_candidate_2],
         best_of_n=2,
+        duplicate_candidate_penalty=15,
+        reject_duplicate_candidates=False,
         resolver_output=resolver_out,
         conflict_output=conflict_out,
         retry_poll_seconds=0.0,
@@ -436,6 +438,8 @@ def test_orchestrator_best_of_n_skips_invalid_candidates_and_selects_valid(
         agent_2_output=None,
         agent_2_candidate_outputs=[a2_candidate_bad, a2_candidate_good],
         best_of_n=2,
+        duplicate_candidate_penalty=15,
+        reject_duplicate_candidates=False,
         resolver_output=resolver_out,
         conflict_output=conflict_out,
         retry_poll_seconds=0.0,
@@ -450,3 +454,119 @@ def test_orchestrator_best_of_n_skips_invalid_candidates_and_selects_valid(
     assert code == 0
     resolver_payload = json.loads(resolver_out.read_text(encoding="utf-8"))
     assert resolver_payload["agent_2_output"]["design_summary"]["layout_type"] == "valid-candidate"
+
+
+def test_orchestrator_best_of_n_penalizes_duplicate_geometry(
+    tmp_path: Path, monkeypatch
+):
+    a1_in = tmp_path / "agent_1_input.json"
+    a1_out = tmp_path / "agent_1_output.json"
+    a2_candidate_1 = tmp_path / "agent_2_output_candidate_1.json"
+    a2_candidate_2 = tmp_path / "agent_2_output_candidate_2.json"
+    resolver_out = tmp_path / "geometry_resolver_input.json"
+    conflict_out = tmp_path / "conflict.json"
+
+    _write(a1_in, _valid_agent1_input())
+    _write(a1_out, _valid_agent1_output())
+
+    candidate_1 = _valid_agent2_output()
+    candidate_1["design_summary"]["layout_type"] = "duplicate-a"
+    candidate_2 = _valid_agent2_output()
+    candidate_2["design_summary"]["layout_type"] = "duplicate-b"
+    _write(a2_candidate_1, candidate_1)
+    _write(a2_candidate_2, candidate_2)
+
+    import adu_drafter.orchestrate as orch
+
+    def fake_score(_agent_2_input, _candidate):
+        # Same soft score; duplicate penalty should make candidate 1 win.
+        return {"score": 95}
+
+    monkeypatch.setattr(orch, "score_agent_2_layout", fake_score)
+
+    args = Namespace(
+        agent_1_input=a1_in,
+        agent_1_output=a1_out,
+        agent_2_output=None,
+        agent_2_candidate_outputs=[a2_candidate_1, a2_candidate_2],
+        best_of_n=2,
+        duplicate_candidate_penalty=15,
+        reject_duplicate_candidates=False,
+        resolver_output=resolver_out,
+        conflict_output=conflict_out,
+        retry_poll_seconds=0.0,
+        grid_step_ft=0.5,
+        wall_thickness_options_ft=[0.35, 0.5],
+        max_retry_iteration=3,
+        schema_retries=2,
+        input_coordinates_normalized_to_sw=True,
+    )
+
+    code = run_orchestration(args)
+    assert code == 0
+    resolver_payload = json.loads(resolver_out.read_text(encoding="utf-8"))
+    assert resolver_payload["agent_2_output"]["design_summary"]["layout_type"] == "duplicate-a"
+
+
+def test_orchestrator_best_of_n_rejects_duplicate_geometry_when_enabled(
+    tmp_path: Path, monkeypatch
+):
+    a1_in = tmp_path / "agent_1_input.json"
+    a1_out = tmp_path / "agent_1_output.json"
+    a2_candidate_1 = tmp_path / "agent_2_output_candidate_1.json"
+    a2_candidate_2 = tmp_path / "agent_2_output_candidate_2.json"
+    a2_candidate_3 = tmp_path / "agent_2_output_candidate_3.json"
+    resolver_out = tmp_path / "geometry_resolver_input.json"
+    conflict_out = tmp_path / "conflict.json"
+
+    _write(a1_in, _valid_agent1_input())
+    _write(a1_out, _valid_agent1_output())
+
+    duplicate_1 = _valid_agent2_output()
+    duplicate_1["design_summary"]["layout_type"] = "duplicate-a"
+    duplicate_2 = _valid_agent2_output()
+    duplicate_2["design_summary"]["layout_type"] = "duplicate-b"
+    unique_3 = _valid_agent2_output()
+    unique_3["design_summary"]["layout_type"] = "unique-c"
+    # Make candidate 3 unique with a minor geometry shift.
+    unique_3["openings_intent"][0]["anchor_local"]["x_ft"] = 9.0
+
+    _write(a2_candidate_1, duplicate_1)
+    _write(a2_candidate_2, duplicate_2)
+    _write(a2_candidate_3, unique_3)
+
+    import adu_drafter.orchestrate as orch
+
+    def fake_score(_agent_2_input, candidate):
+        layout_type = candidate.design_summary.layout_type
+        if layout_type == "duplicate-a":
+            return {"score": 90}
+        if layout_type == "duplicate-b":
+            return {"score": 99}
+        return {"score": 95}
+
+    monkeypatch.setattr(orch, "score_agent_2_layout", fake_score)
+
+    args = Namespace(
+        agent_1_input=a1_in,
+        agent_1_output=a1_out,
+        agent_2_output=None,
+        agent_2_candidate_outputs=[a2_candidate_1, a2_candidate_2, a2_candidate_3],
+        best_of_n=3,
+        duplicate_candidate_penalty=15,
+        reject_duplicate_candidates=True,
+        resolver_output=resolver_out,
+        conflict_output=conflict_out,
+        retry_poll_seconds=0.0,
+        grid_step_ft=0.5,
+        wall_thickness_options_ft=[0.35, 0.5],
+        max_retry_iteration=3,
+        schema_retries=2,
+        input_coordinates_normalized_to_sw=True,
+    )
+
+    code = run_orchestration(args)
+    assert code == 0
+    resolver_payload = json.loads(resolver_out.read_text(encoding="utf-8"))
+    # Duplicate-b has the highest score but is duplicate and should be skipped.
+    assert resolver_payload["agent_2_output"]["design_summary"]["layout_type"] == "unique-c"

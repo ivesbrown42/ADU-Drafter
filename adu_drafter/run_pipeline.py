@@ -36,6 +36,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="Max number of candidate Agent 2 outputs to consider.",
     )
     parser.add_argument(
+        "--duplicate-candidate-penalty",
+        type=int,
+        default=15,
+        help=(
+            "Penalty applied when multiple Agent 2 candidates have duplicate geometry "
+            "during Best-of-N selection (0 disables duplicate penalty)."
+        ),
+    )
+    parser.add_argument(
+        "--reject-duplicate-candidates",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "If true, Best-of-N rejects duplicate-geometry candidates instead of penalizing."
+        ),
+    )
+    parser.add_argument(
         "--resolver-input-output",
         type=Path,
         default=Path("data/geometry_resolver_input.json"),
@@ -115,6 +132,8 @@ def run(args: argparse.Namespace) -> int:
         agent_2_output=args.agent_2_output,
         agent_2_candidate_outputs=args.agent_2_candidate_outputs,
         best_of_n=args.best_of_n,
+        duplicate_candidate_penalty=args.duplicate_candidate_penalty,
+        reject_duplicate_candidates=args.reject_duplicate_candidates,
         resolver_output=args.resolver_input_output,
         conflict_output=args.conflict_output,
         schema_retries=args.schema_retries,

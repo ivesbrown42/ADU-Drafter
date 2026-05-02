@@ -108,6 +108,80 @@ def _load_agent2_with_retries(
     ) from last_error
 
 
+def _geometry_signature(candidate) -> str:
+    """Stable signature for geometry-equivalent Agent 2 candidates."""
+
+    def _rounded(value: float) -> float:
+        return round(float(value), 4)
+
+    rooms = sorted(
+        [
+            {
+                "room_type": room.room_type,
+                "x_ft": _rounded(room.rect.x_ft),
+                "y_ft": _rounded(room.rect.y_ft),
+                "width_ft": _rounded(room.rect.width_ft),
+                "depth_ft": _rounded(room.rect.depth_ft),
+            }
+            for room in candidate.rooms
+        ],
+        key=lambda item: (
+            item["room_type"],
+            item["x_ft"],
+            item["y_ft"],
+            item["width_ft"],
+            item["depth_ft"],
+        ),
+    )
+    walls = sorted(
+        [
+            {
+                "kind": wall.kind,
+                "sx": _rounded(wall.start_local.x_ft),
+                "sy": _rounded(wall.start_local.y_ft),
+                "ex": _rounded(wall.end_local.x_ft),
+                "ey": _rounded(wall.end_local.y_ft),
+                "thickness_ft": _rounded(wall.thickness_ft),
+            }
+            for wall in candidate.walls_intent
+        ],
+        key=lambda item: (
+            item["kind"],
+            item["sx"],
+            item["sy"],
+            item["ex"],
+            item["ey"],
+            item["thickness_ft"],
+        ),
+    )
+    openings = sorted(
+        [
+            {
+                "opening_type": opening.opening_type,
+                "wall_id": opening.wall_id,
+                "x_ft": _rounded(opening.anchor_local.x_ft),
+                "y_ft": _rounded(opening.anchor_local.y_ft),
+                "width_ft": _rounded(opening.width_ft),
+            }
+            for opening in candidate.openings_intent
+        ],
+        key=lambda item: (
+            item["opening_type"],
+            item["wall_id"],
+            item["x_ft"],
+            item["y_ft"],
+            item["width_ft"],
+        ),
+    )
+    payload = {
+        "conflict_flag": bool(candidate.conflict_flag),
+        "rooms": rooms,
+        "walls": walls,
+        "openings": openings,
+    }
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"))
+
+
 def _select_best_agent2_candidate(
     candidate_paths: list[Path],
     agent_2_input,
@@ -115,17 +189,22 @@ def _select_best_agent2_candidate(
     best_of_n: int,
     retries: int,
     retry_poll_seconds: float,
+    duplicate_candidate_penalty: int,
+    reject_duplicate_candidates: bool,
 ):
     if best_of_n < 1:
         raise ValueError("--best-of-n must be >= 1")
     if not candidate_paths:
         raise ValueError("Best-of-N selection requires at least one Agent 2 candidate path")
+    if duplicate_candidate_penalty < 0:
+        raise ValueError("--duplicate-candidate-penalty must be >= 0")
 
     selection_count = min(best_of_n, len(candidate_paths))
     best_candidate = None
     best_path: Path | None = None
     best_score: float | None = None
     failures: list[str] = []
+    seen_signatures: dict[str, Path] = {}
 
     for idx, candidate_path in enumerate(candidate_paths[:selection_count], start=1):
         label = f"Agent 2 candidate {idx}/{selection_count} ({candidate_path})"
@@ -137,8 +216,36 @@ def _select_best_agent2_candidate(
                 retry_poll_seconds=retry_poll_seconds,
                 candidate_label=label,
             )
+            signature = _geometry_signature(candidate)
+            duplicate_of: Path | None = seen_signatures.get(signature)
+            if duplicate_of is None:
+                seen_signatures[signature] = candidate_path
+
             quality = score_agent_2_layout(agent_2_input, candidate)
-            score = float(quality.get("score", 0.0))
+            base_score = float(quality.get("score", 0.0))
+            score = base_score
+            if duplicate_of is not None:
+                if reject_duplicate_candidates:
+                    failures.append(
+                        f"{candidate_path}: duplicate geometry of {duplicate_of}"
+                    )
+                    print(
+                        f"[best-of-n] Candidate {idx}/{selection_count} rejected as duplicate "
+                        f"of {duplicate_of}: {candidate_path}"
+                    )
+                    continue
+                if duplicate_candidate_penalty > 0:
+                    score = max(0.0, base_score - float(duplicate_candidate_penalty))
+                    print(
+                        f"[best-of-n] Candidate {idx}/{selection_count} is duplicate of "
+                        f"{duplicate_of}; applying duplicate penalty={duplicate_candidate_penalty} "
+                        f"(base={base_score:.2f}, adjusted={score:.2f})."
+                    )
+                else:
+                    print(
+                        f"[best-of-n] Candidate {idx}/{selection_count} duplicates geometry of "
+                        f"{duplicate_of}; no duplicate penalty applied."
+                    )
             print(
                 f"[best-of-n] Candidate {idx}/{selection_count} valid with quality score={score:.2f}: "
                 f"{candidate_path}"
@@ -207,6 +314,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="Maximum number of Agent 2 candidates to score/select from (uses first N paths).",
     )
     parser.add_argument(
+        "--duplicate-candidate-penalty",
+        type=int,
+        default=15,
+        help=(
+            "Penalty subtracted from soft score when a candidate duplicates a prior "
+            "candidate's geometry signature (0 disables penalty)."
+        ),
+    )
+    parser.add_argument(
+        "--reject-duplicate-candidates",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "If true, Best-of-N skips geometry-duplicate candidates instead of scoring them."
+        ),
+    )
+    parser.add_argument(
         "--resolver-output",
         type=Path,
         default=Path("data/geometry_resolver_input.json"),
@@ -273,6 +397,12 @@ def run_orchestration(args: argparse.Namespace) -> int:
         raise ValueError("--retry-poll-seconds must be >= 0")
     if args.best_of_n < 1:
         raise ValueError("--best-of-n must be >= 1")
+    if not hasattr(args, "duplicate_candidate_penalty"):
+        args.duplicate_candidate_penalty = 15
+    if not hasattr(args, "reject_duplicate_candidates"):
+        args.reject_duplicate_candidates = False
+    if args.duplicate_candidate_penalty < 0:
+        raise ValueError("--duplicate-candidate-penalty must be >= 0")
 
     agent_1_input = _load_with_retries(
         load_agent_1_input,
@@ -346,6 +476,8 @@ def run_orchestration(args: argparse.Namespace) -> int:
             best_of_n=args.best_of_n,
             retries=args.schema_retries,
             retry_poll_seconds=args.retry_poll_seconds,
+            duplicate_candidate_penalty=args.duplicate_candidate_penalty,
+            reject_duplicate_candidates=args.reject_duplicate_candidates,
         )
         print("[3] Agent 2 Best-of-N selection completed.")
     else:
