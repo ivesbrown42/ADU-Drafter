@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import json
 import math
 from pathlib import Path
-from typing import Literal, Sequence
+from typing import Callable, Literal, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
@@ -783,149 +784,55 @@ def _build_layout_rules(program: ProgramCatalogEntry) -> LayoutRules:
     )
 
 
-def validate_agent_2_output_against_input(agent_input: Agent2Input, agent_output: Agent2Output) -> None:
-    """Cross-validate Agent 2 output IDs against Agent 2 input contract."""
+@dataclass(frozen=True)
+class HardValidationRule:
+    """Registry entry for a single deterministic hard validation rule."""
 
-    if agent_output.conflict_flag:
-        return
-    if agent_output.design_summary.zone_id != agent_input.selected_zone.zone_id:
-        raise ValueError("Agent2 output zone_id does not match Agent2 input selected_zone")
-    if agent_output.design_summary.program_id != agent_input.selected_program.program_id:
-        raise ValueError("Agent2 output program_id does not match Agent2 input selected_program")
+    code: str
+    description: str
+    check: Callable[["Agent2ValidationContext"], None]
 
-    zone_xs = [pt[0] for pt in agent_input.selected_zone.zone_polygon_sw_origin]
-    zone_ys = [pt[1] for pt in agent_input.selected_zone.zone_polygon_sw_origin]
-    zone_width_ft = max(zone_xs) - min(zone_xs)
-    zone_depth_ft = max(zone_ys) - min(zone_ys)
-    footprint_width_ft = agent_input.selected_program.footprint_width_ft
-    footprint_depth_ft = agent_input.selected_program.footprint_depth_ft
-    grid = agent_input.design_rules.grid_step_ft
-    if zone_width_ft <= 0 or zone_depth_ft <= 0:
-        raise ValueError("selected_zone has non-positive width/depth")
-    if footprint_width_ft > zone_width_ft + 1e-6 or footprint_depth_ft > zone_depth_ft + 1e-6:
-        raise ValueError(
-            "PROGRAM_EXCEEDS_ZONE: selected_program footprint exceeds selected_zone bounds"
-        )
 
-    def _is_snapped(value: float) -> bool:
-        quotient = value / grid
-        return abs(quotient - round(quotient)) <= 1e-6
+@dataclass
+class Agent2ValidationContext:
+    """Pre-computed context shared across hard validation rules."""
 
-    def _validate_local_point(name: str, x: float, y: float) -> None:
-        if x < 0 or y < 0 or x > footprint_width_ft or y > footprint_depth_ft:
-            raise ValueError(f"{name} is outside zone-local bounds")
-        if not _is_snapped(x) or not _is_snapped(y):
-            raise ValueError(f"{name} is not snapped to grid_step_ft={grid}")
-    
-    layout_rules = agent_input.layout_rules
-    open_plan_required = layout_rules.open_plan_required or agent_input.selected_program.bedrooms == 1
-    if layout_rules.required_room_counts:
-        required_room_counts = dict(layout_rules.required_room_counts)
-    elif open_plan_required:
-        required_room_counts: dict[RoomType, int] = {
-            "bedroom": agent_input.selected_program.bedrooms,
-            "bathroom": agent_input.selected_program.bathrooms,
-            "open_living_kitchen": 1,
-        }
-    else:
-        required_room_counts = {
-            "bedroom": agent_input.selected_program.bedrooms,
-            "bathroom": agent_input.selected_program.bathrooms,
-            "kitchen": 1,
-            "living": 1,
-        }
-    room_type_counts: dict[RoomType, int] = {
-        room_type: 0 for room_type in required_room_counts
-    }
+    agent_input: Agent2Input
+    agent_output: Agent2Output
+    zone_width_ft: float
+    zone_depth_ft: float
+    footprint_width_ft: float
+    footprint_depth_ft: float
+    layout_rules: LayoutRules
+    open_plan_required: bool
+    required_room_counts: dict[RoomType, int]
+    room_type_counts: dict[RoomType, int]
+    room_groups: dict[RoomType, list[RoomIntent]]
+    room_rects: list[tuple[str, float, float, float, float]]
+    total_room_area: float
+    wall_kind_by_id: dict[str, WallKind]
+    door_openings: list[OpeningIntent]
 
-    room_ids: set[str] = set()
-    room_rects: list[tuple[str, float, float, float, float]] = []
-    room_groups: dict[RoomType, list[RoomIntent]] = {}
-    total_room_area = 0.0
-    for room in agent_output.rooms:
-        if room.room_id in room_ids:
-            raise ValueError(f"Duplicate room_id '{room.room_id}' in Agent2 output")
-        room_ids.add(room.room_id)
-        if room.room_type in room_type_counts:
-            room_type_counts[room.room_type] += 1
-        room_groups.setdefault(room.room_type, []).append(room)
-        rect = room.rect
-        if (
-            rect.x_ft < 0
-            or rect.y_ft < 0
-            or rect.max_x > footprint_width_ft
-            or rect.max_y > footprint_depth_ft
-        ):
-            raise ValueError(f"Room '{room.room_id}' extends outside selected zone bounds")
-        total_room_area += rect.width_ft * rect.depth_ft
-        room_rects.append((room.room_id, rect.x_ft, rect.y_ft, rect.max_x, rect.max_y))
+    def opening_touches_room_types(self, opening: OpeningIntent) -> set[RoomType]:
+        touched: set[RoomType] = set()
+        for room in self.agent_output.rooms:
+            if _point_on_room_boundary(room.rect, opening.anchor_local):
+                touched.add(room.room_type)
+        return touched
 
-    if open_plan_required and (
-        room_groups.get("living") or room_groups.get("kitchen")
-    ):
-        raise ValueError(
-            "Error: OPEN_PLAN_REQUIRED. open_plan_required=true in layout_rules requires "
-            "a single 'open_living_kitchen' room and forbids separate living/kitchen rooms. "
-            "Merge living and kitchen into one open_living_kitchen room."
-        )
 
-    for room_type, required_count in required_room_counts.items():
-        if required_count <= 0:
-            continue
-        actual_count = room_type_counts.get(room_type, 0)
-        if actual_count < required_count:
-            type_code = room_type.upper()
-            raise ValueError(
-                f"Error: MISSING_{type_code}. layout_rules.required_room_counts requires >= "
-                f"{required_count} {room_type} room(s), got {actual_count}."
-            )
+def _point_on_room_boundary(rect: LocalRect, point: LocalPoint) -> bool:
+    x = point.x_ft
+    y = point.y_ft
+    on_left = abs(x - rect.x_ft) <= 1e-6 and rect.y_ft - 1e-6 <= y <= rect.max_y + 1e-6
+    on_right = abs(x - rect.max_x) <= 1e-6 and rect.y_ft - 1e-6 <= y <= rect.max_y + 1e-6
+    on_bottom = abs(y - rect.y_ft) <= 1e-6 and rect.x_ft - 1e-6 <= x <= rect.max_x + 1e-6
+    on_top = abs(y - rect.max_y) <= 1e-6 and rect.x_ft - 1e-6 <= x <= rect.max_x + 1e-6
+    return on_left or on_right or on_bottom or on_top
 
-    # Room rectangles may touch at boundaries but must not overlap with positive area.
-    for i in range(len(room_rects)):
-        id_i, ax1, ay1, ax2, ay2 = room_rects[i]
-        for j in range(i + 1, len(room_rects)):
-            id_j, bx1, by1, bx2, by2 = room_rects[j]
-            overlap_w = min(ax2, bx2) - max(ax1, bx1)
-            overlap_h = min(ay2, by2) - max(ay1, by1)
-            if overlap_w > 0 and overlap_h > 0:
-                raise ValueError(f"Rooms '{id_i}' and '{id_j}' overlap")
 
-    zone_area = zone_width_ft * zone_depth_ft
-    if total_room_area > zone_area + 1e-6:
-        raise ValueError("Total room area exceeds selected zone area")
-
-    def _validate_room_minimums(
-        room: RoomIntent,
-        *,
-        room_type: RoomType,
-        min_width_ft: float,
-        min_depth_ft: float,
-        min_area_sf: float | None,
-    ) -> None:
-        if room.rect.width_ft < min_width_ft - 1e-6:
-            raise ValueError(
-                "Error: PROPORTION_VIOLATION. "
-                f"layout_rules.minimum_room_dimensions.{room_type}.min_width_ft={min_width_ft:.1f} "
-                f"but room_id='{room.room_id}' width is {room.rect.width_ft:.2f}ft. "
-                "Increase the room width."
-            )
-        if room.rect.depth_ft < min_depth_ft - 1e-6:
-            raise ValueError(
-                "Error: PROPORTION_VIOLATION. "
-                f"layout_rules.minimum_room_dimensions.{room_type}.min_depth_ft={min_depth_ft:.1f} "
-                f"but room_id='{room.room_id}' depth is {room.rect.depth_ft:.2f}ft. "
-                "Increase the room depth."
-            )
-        area_sf = room.rect.width_ft * room.rect.depth_ft
-        if min_area_sf is not None and area_sf < min_area_sf - 1e-6:
-            raise ValueError(
-                "Error: PROPORTION_VIOLATION. "
-                f"layout_rules.minimum_room_dimensions.{room_type}.min_area_sf={min_area_sf:.1f} "
-                f"but room_id='{room.room_id}' area is {area_sf:.2f}sf. "
-                "Increase room area."
-            )
-
-    default_minimums: dict[RoomType, MinimumRoomDimension] = {
+def _default_minimum_room_dimensions() -> dict[RoomType, MinimumRoomDimension]:
+    return {
         "bedroom": MinimumRoomDimension(
             min_width_ft=10.0,
             min_depth_ft=11.0,
@@ -952,14 +859,102 @@ def validate_agent_2_output_against_input(agent_input: Agent2Input, agent_output
             min_area_sf=160.0,
         ),
     }
-    guideline_by_type = dict(default_minimums)
-    guideline_by_type.update(layout_rules.minimum_room_dimensions)
+
+
+def _axis_center(rooms: Sequence[RoomIntent], *, axis: LongAxis) -> float | None:
+    if not rooms:
+        return None
+    vals: list[float] = []
+    for room in rooms:
+        center_x = room.rect.x_ft + (room.rect.width_ft / 2.0)
+        center_y = room.rect.y_ft + (room.rect.depth_ft / 2.0)
+        vals.append(center_x if axis == "x" else center_y)
+    return sum(vals) / len(vals)
+
+
+def _validate_room_minimums(
+    room: RoomIntent,
+    *,
+    room_type: RoomType,
+    min_width_ft: float,
+    min_depth_ft: float,
+    min_area_sf: float | None,
+) -> None:
+    if room.rect.width_ft < min_width_ft - 1e-6:
+        raise ValueError(
+            "Error: PROPORTION_VIOLATION. "
+            f"layout_rules.minimum_room_dimensions.{room_type}.min_width_ft={min_width_ft:.1f} "
+            f"but room_id='{room.room_id}' width is {room.rect.width_ft:.2f}ft. "
+            "Increase the room width."
+        )
+    if room.rect.depth_ft < min_depth_ft - 1e-6:
+        raise ValueError(
+            "Error: PROPORTION_VIOLATION. "
+            f"layout_rules.minimum_room_dimensions.{room_type}.min_depth_ft={min_depth_ft:.1f} "
+            f"but room_id='{room.room_id}' depth is {room.rect.depth_ft:.2f}ft. "
+            "Increase the room depth."
+        )
+    area_sf = room.rect.width_ft * room.rect.depth_ft
+    if min_area_sf is not None and area_sf < min_area_sf - 1e-6:
+        raise ValueError(
+            "Error: PROPORTION_VIOLATION. "
+            f"layout_rules.minimum_room_dimensions.{room_type}.min_area_sf={min_area_sf:.1f} "
+            f"but room_id='{room.room_id}' area is {area_sf:.2f}sf. "
+            "Increase room area."
+        )
+
+
+def _rule_open_plan_required(ctx: Agent2ValidationContext) -> None:
+    if ctx.open_plan_required and (
+        ctx.room_groups.get("living") or ctx.room_groups.get("kitchen")
+    ):
+        raise ValueError(
+            "Error: OPEN_PLAN_REQUIRED. open_plan_required=true in layout_rules requires "
+            "a single 'open_living_kitchen' room and forbids separate living/kitchen rooms. "
+            "Merge living and kitchen into one open_living_kitchen room."
+        )
+
+
+def _rule_required_room_counts(ctx: Agent2ValidationContext) -> None:
+    for room_type, required_count in ctx.required_room_counts.items():
+        if required_count <= 0:
+            continue
+        actual_count = ctx.room_type_counts.get(room_type, 0)
+        if actual_count < required_count:
+            type_code = room_type.upper()
+            raise ValueError(
+                f"Error: MISSING_{type_code}. layout_rules.required_room_counts requires >= "
+                f"{required_count} {room_type} room(s), got {actual_count}."
+            )
+
+
+def _rule_room_overlap(ctx: Agent2ValidationContext) -> None:
+    # Room rectangles may touch at boundaries but must not overlap with positive area.
+    for i in range(len(ctx.room_rects)):
+        id_i, ax1, ay1, ax2, ay2 = ctx.room_rects[i]
+        for j in range(i + 1, len(ctx.room_rects)):
+            id_j, bx1, by1, bx2, by2 = ctx.room_rects[j]
+            overlap_w = min(ax2, bx2) - max(ax1, bx1)
+            overlap_h = min(ay2, by2) - max(ay1, by1)
+            if overlap_w > 0 and overlap_h > 0:
+                raise ValueError(f"Rooms '{id_i}' and '{id_j}' overlap")
+
+
+def _rule_total_room_area_within_zone(ctx: Agent2ValidationContext) -> None:
+    zone_area = ctx.zone_width_ft * ctx.zone_depth_ft
+    if ctx.total_room_area > zone_area + 1e-6:
+        raise ValueError("Total room area exceeds selected zone area")
+
+
+def _rule_room_minimum_dimensions(ctx: Agent2ValidationContext) -> None:
+    guideline_by_type = _default_minimum_room_dimensions()
+    guideline_by_type.update(ctx.layout_rules.minimum_room_dimensions)
 
     for room_type in ("bedroom", "bathroom", "kitchen", "living", "open_living_kitchen"):
         guideline = guideline_by_type.get(room_type)
         if guideline is None:
             continue
-        for room in room_groups.get(room_type, []):
+        for room in ctx.room_groups.get(room_type, []):
             _validate_room_minimums(
                 room,
                 room_type=room_type,
@@ -968,29 +963,21 @@ def validate_agent_2_output_against_input(agent_input: Agent2Input, agent_output
                 min_area_sf=guideline.min_area_sf,
             )
 
-    axis: LongAxis = layout_rules.long_axis
 
-    def _axis_center(rooms: Sequence[RoomIntent]) -> float | None:
-        if not rooms:
-            return None
-        vals: list[float] = []
-        for room in rooms:
-            center_x = room.rect.x_ft + (room.rect.width_ft / 2.0)
-            center_y = room.rect.y_ft + (room.rect.depth_ft / 2.0)
-            vals.append(center_x if axis == "x" else center_y)
-        return sum(vals) / len(vals)
-
-    bedroom_center = _axis_center(room_groups.get("bedroom", []))
-    bathroom_center = _axis_center(room_groups.get("bathroom", []))
-    if open_plan_required:
-        living_center = _axis_center(room_groups.get("open_living_kitchen", []))
+def _rule_plumbing_core_order(ctx: Agent2ValidationContext) -> None:
+    axis: LongAxis = ctx.layout_rules.long_axis
+    bedroom_center = _axis_center(ctx.room_groups.get("bedroom", []), axis=axis)
+    bathroom_center = _axis_center(ctx.room_groups.get("bathroom", []), axis=axis)
+    if ctx.open_plan_required:
+        living_center = _axis_center(ctx.room_groups.get("open_living_kitchen", []), axis=axis)
     else:
         living_center = _axis_center(
-            (room_groups.get("living", []) or [])
-            + (room_groups.get("kitchen", []) or [])
+            (ctx.room_groups.get("living", []) or [])
+            + (ctx.room_groups.get("kitchen", []) or []),
+            axis=axis,
         )
     if (
-        layout_rules.plumbing_core_required
+        ctx.layout_rules.plumbing_core_required
         and bedroom_center is not None
         and bathroom_center is not None
         and living_center is not None
@@ -1004,6 +991,175 @@ def validate_agent_2_output_against_input(agent_input: Agent2Input, agent_output
             "and living space as required by your layout_rules. Move the bathroom to the center "
             "of the plan along the long axis."
         )
+
+
+def _rule_room_connectivity(ctx: Agent2ValidationContext) -> None:
+    for room in ctx.agent_output.rooms:
+        if room.room_type == "storage":
+            continue
+        if not any(_point_on_room_boundary(room.rect, door.anchor_local) for door in ctx.door_openings):
+            raise ValueError(
+                f"ROOM_DISCONNECTED: room '{room.room_id}' has no door opening on its boundary"
+            )
+
+
+def _rule_entry_opens_into_public_room(ctx: Agent2ValidationContext) -> None:
+    exterior_doors = [
+        door for door in ctx.door_openings if ctx.wall_kind_by_id.get(door.wall_id) == "exterior"
+    ]
+    if not exterior_doors:
+        raise ValueError(
+            "Error: ENTRY_VIOLATION. No exterior entry door found. Add a primary exterior door "
+            "opening into a public room (living, kitchen, or open_living_kitchen)."
+        )
+    primary_entry = exterior_doors[0]
+    entry_touched_types = ctx.opening_touches_room_types(primary_entry)
+    if {"bedroom", "bathroom"} & entry_touched_types:
+        raise ValueError(
+            "Error: ENTRY_VIOLATION. Exterior door opens directly into a private room "
+            "(bedroom/bathroom). Move the entry to living, kitchen, or open_living_kitchen."
+        )
+    if "circulation" in entry_touched_types:
+        raise ValueError(
+            "Error: ENTRY_VIOLATION. Exterior door opens into circulation/hallway. "
+            "Move the entry to living, kitchen, or open_living_kitchen."
+        )
+    if not ({"living", "kitchen", "open_living_kitchen"} & entry_touched_types):
+        raise ValueError(
+            "Error: ENTRY_VIOLATION. Exterior door must open into a public room "
+            "(living, kitchen, or open_living_kitchen)."
+        )
+
+
+def _rule_bathroom_door_not_into_kitchen(ctx: Agent2ValidationContext) -> None:
+    for door in ctx.door_openings:
+        touched_types = ctx.opening_touches_room_types(door)
+        if "bathroom" in touched_types and (
+            "kitchen" in touched_types or "open_living_kitchen" in touched_types
+        ):
+            raise ValueError(
+                "Error: CIRCULATION_VIOLATION. Bathroom door opens directly into kitchen/open "
+                "living-kitchen. Relocate the bathroom door to living or circulation space."
+            )
+
+
+AGENT2_HARD_RULE_REGISTRY: tuple[HardValidationRule, ...] = (
+    HardValidationRule(
+        code="OPEN_PLAN_REQUIRED",
+        description="Open-plan layouts must not split living and kitchen when required.",
+        check=_rule_open_plan_required,
+    ),
+    HardValidationRule(
+        code="MISSING_REQUIRED_ROOM_COUNTS",
+        description="Program required room counts must be satisfied.",
+        check=_rule_required_room_counts,
+    ),
+    HardValidationRule(
+        code="ROOM_OVERLAP",
+        description="Room rectangles may touch boundaries but not overlap with positive area.",
+        check=_rule_room_overlap,
+    ),
+    HardValidationRule(
+        code="TOTAL_ROOM_AREA_EXCEEDS_ZONE",
+        description="Total room area must not exceed selected zone area.",
+        check=_rule_total_room_area_within_zone,
+    ),
+    HardValidationRule(
+        code="PROPORTION_VIOLATION",
+        description="Rooms must satisfy minimum dimensions from layout rules.",
+        check=_rule_room_minimum_dimensions,
+    ),
+    HardValidationRule(
+        code="PLUMBING_CORE_VIOLATION",
+        description="Bathroom must lie between bedroom and living zones along long axis when required.",
+        check=_rule_plumbing_core_order,
+    ),
+    HardValidationRule(
+        code="ROOM_DISCONNECTED",
+        description="Every non-storage room must have at least one door opening.",
+        check=_rule_room_connectivity,
+    ),
+    HardValidationRule(
+        code="ENTRY_VIOLATION",
+        description="Primary exterior entry must connect to a public room.",
+        check=_rule_entry_opens_into_public_room,
+    ),
+    HardValidationRule(
+        code="CIRCULATION_VIOLATION",
+        description="Bathroom door must not open directly into kitchen/open_living_kitchen.",
+        check=_rule_bathroom_door_not_into_kitchen,
+    ),
+)
+
+
+def _build_agent2_validation_context(
+    agent_input: Agent2Input, agent_output: Agent2Output
+) -> Agent2ValidationContext:
+    zone_xs = [pt[0] for pt in agent_input.selected_zone.zone_polygon_sw_origin]
+    zone_ys = [pt[1] for pt in agent_input.selected_zone.zone_polygon_sw_origin]
+    zone_width_ft = max(zone_xs) - min(zone_xs)
+    zone_depth_ft = max(zone_ys) - min(zone_ys)
+    footprint_width_ft = agent_input.selected_program.footprint_width_ft
+    footprint_depth_ft = agent_input.selected_program.footprint_depth_ft
+    grid = agent_input.design_rules.grid_step_ft
+
+    if zone_width_ft <= 0 or zone_depth_ft <= 0:
+        raise ValueError("selected_zone has non-positive width/depth")
+    if footprint_width_ft > zone_width_ft + 1e-6 or footprint_depth_ft > zone_depth_ft + 1e-6:
+        raise ValueError(
+            "PROGRAM_EXCEEDS_ZONE: selected_program footprint exceeds selected_zone bounds"
+        )
+
+    def _is_snapped(value: float) -> bool:
+        quotient = value / grid
+        return abs(quotient - round(quotient)) <= 1e-6
+
+    def _validate_local_point(name: str, x: float, y: float) -> None:
+        if x < 0 or y < 0 or x > footprint_width_ft or y > footprint_depth_ft:
+            raise ValueError(f"{name} is outside zone-local bounds")
+        if not _is_snapped(x) or not _is_snapped(y):
+            raise ValueError(f"{name} is not snapped to grid_step_ft={grid}")
+
+    layout_rules = agent_input.layout_rules
+    open_plan_required = layout_rules.open_plan_required or agent_input.selected_program.bedrooms == 1
+    if layout_rules.required_room_counts:
+        required_room_counts = dict(layout_rules.required_room_counts)
+    elif open_plan_required:
+        required_room_counts: dict[RoomType, int] = {
+            "bedroom": agent_input.selected_program.bedrooms,
+            "bathroom": agent_input.selected_program.bathrooms,
+            "open_living_kitchen": 1,
+        }
+    else:
+        required_room_counts = {
+            "bedroom": agent_input.selected_program.bedrooms,
+            "bathroom": agent_input.selected_program.bathrooms,
+            "kitchen": 1,
+            "living": 1,
+        }
+
+    room_type_counts: dict[RoomType, int] = {room_type: 0 for room_type in required_room_counts}
+    room_ids: set[str] = set()
+    room_rects: list[tuple[str, float, float, float, float]] = []
+    room_groups: dict[RoomType, list[RoomIntent]] = {}
+    total_room_area = 0.0
+    for room in agent_output.rooms:
+        if room.room_id in room_ids:
+            raise ValueError(f"Duplicate room_id '{room.room_id}' in Agent2 output")
+        room_ids.add(room.room_id)
+        if room.room_type in room_type_counts:
+            room_type_counts[room.room_type] += 1
+        room_groups.setdefault(room.room_type, []).append(room)
+        rect = room.rect
+        if (
+            rect.x_ft < 0
+            or rect.y_ft < 0
+            or rect.max_x > footprint_width_ft
+            or rect.max_y > footprint_depth_ft
+        ):
+            raise ValueError(f"Room '{room.room_id}' extends outside selected zone bounds")
+        total_room_area += rect.width_ft * rect.depth_ft
+        room_rects.append((room.room_id, rect.x_ft, rect.y_ft, rect.max_x, rect.max_y))
 
     wall_ids: set[str] = set()
     wall_kind_by_id: dict[str, WallKind] = {}
@@ -1038,65 +1194,46 @@ def validate_agent_2_output_against_input(agent_input: Agent2Input, agent_output
             opening.anchor_local.x_ft,
             opening.anchor_local.y_ft,
         )
+    door_openings = [
+        opening for opening in agent_output.openings_intent if opening.opening_type == "door"
+    ]
 
-    def _point_on_room_boundary(rect: LocalRect, point: LocalPoint) -> bool:
-        x = point.x_ft
-        y = point.y_ft
-        on_left = abs(x - rect.x_ft) <= 1e-6 and rect.y_ft - 1e-6 <= y <= rect.max_y + 1e-6
-        on_right = abs(x - rect.max_x) <= 1e-6 and rect.y_ft - 1e-6 <= y <= rect.max_y + 1e-6
-        on_bottom = abs(y - rect.y_ft) <= 1e-6 and rect.x_ft - 1e-6 <= x <= rect.max_x + 1e-6
-        on_top = abs(y - rect.max_y) <= 1e-6 and rect.x_ft - 1e-6 <= x <= rect.max_x + 1e-6
-        return on_left or on_right or on_bottom or on_top
+    return Agent2ValidationContext(
+        agent_input=agent_input,
+        agent_output=agent_output,
+        zone_width_ft=zone_width_ft,
+        zone_depth_ft=zone_depth_ft,
+        footprint_width_ft=footprint_width_ft,
+        footprint_depth_ft=footprint_depth_ft,
+        layout_rules=layout_rules,
+        open_plan_required=open_plan_required,
+        required_room_counts=required_room_counts,
+        room_type_counts=room_type_counts,
+        room_groups=room_groups,
+        room_rects=room_rects,
+        total_room_area=total_room_area,
+        wall_kind_by_id=wall_kind_by_id,
+        door_openings=door_openings,
+    )
 
-    def _opening_touches_room_types(opening: OpeningIntent) -> set[RoomType]:
-        touched: set[RoomType] = set()
-        for room in agent_output.rooms:
-            if _point_on_room_boundary(room.rect, opening.anchor_local):
-                touched.add(room.room_type)
-        return touched
 
-    door_openings = [opening for opening in agent_output.openings_intent if opening.opening_type == "door"]
-    for room in agent_output.rooms:
-        if room.room_type == "storage":
-            continue
-        if not any(_point_on_room_boundary(room.rect, door.anchor_local) for door in door_openings):
-            raise ValueError(
-                f"ROOM_DISCONNECTED: room '{room.room_id}' has no door opening on its boundary"
-            )
+def _run_hard_rule_registry(ctx: Agent2ValidationContext) -> None:
+    for rule in AGENT2_HARD_RULE_REGISTRY:
+        rule.check(ctx)
 
-    exterior_doors = [door for door in door_openings if wall_kind_by_id.get(door.wall_id) == "exterior"]
-    if not exterior_doors:
-        raise ValueError(
-            "Error: ENTRY_VIOLATION. No exterior entry door found. Add a primary exterior door "
-            "opening into a public room (living, kitchen, or open_living_kitchen)."
-        )
-    primary_entry = exterior_doors[0]
-    entry_touched_types = _opening_touches_room_types(primary_entry)
-    if {"bedroom", "bathroom"} & entry_touched_types:
-        raise ValueError(
-            "Error: ENTRY_VIOLATION. Exterior door opens directly into a private room "
-            "(bedroom/bathroom). Move the entry to living, kitchen, or open_living_kitchen."
-        )
-    if "circulation" in entry_touched_types:
-        raise ValueError(
-            "Error: ENTRY_VIOLATION. Exterior door opens into circulation/hallway. "
-            "Move the entry to living, kitchen, or open_living_kitchen."
-        )
-    if not ({"living", "kitchen", "open_living_kitchen"} & entry_touched_types):
-        raise ValueError(
-            "Error: ENTRY_VIOLATION. Exterior door must open into a public room "
-            "(living, kitchen, or open_living_kitchen)."
-        )
 
-    for door in door_openings:
-        touched_types = _opening_touches_room_types(door)
-        if "bathroom" in touched_types and (
-            "kitchen" in touched_types or "open_living_kitchen" in touched_types
-        ):
-            raise ValueError(
-                "Error: CIRCULATION_VIOLATION. Bathroom door opens directly into kitchen/open "
-                "living-kitchen. Relocate the bathroom door to living or circulation space."
-            )
+def validate_agent_2_output_against_input(agent_input: Agent2Input, agent_output: Agent2Output) -> None:
+    """Cross-validate Agent 2 output IDs against Agent 2 input contract."""
+
+    if agent_output.conflict_flag:
+        return
+    if agent_output.design_summary.zone_id != agent_input.selected_zone.zone_id:
+        raise ValueError("Agent2 output zone_id does not match Agent2 input selected_zone")
+    if agent_output.design_summary.program_id != agent_input.selected_program.program_id:
+        raise ValueError("Agent2 output program_id does not match Agent2 input selected_program")
+
+    context = _build_agent2_validation_context(agent_input, agent_output)
+    _run_hard_rule_registry(context)
 
 
 def build_geometry_resolver_input(
